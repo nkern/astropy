@@ -18,8 +18,6 @@ from ...extern import six
 import functools
 import sys
 
-from ..decorators import deprecated
-
 __all__ = ['invalidate_caches', 'override__dir__', 'suppress',
            'possible_filename', 'namedtuple_asdict']
 
@@ -94,36 +92,10 @@ def override__dir__(f):
 
 
 try:
-    from contextlib import ignored
-except ImportError:
-    from contextlib import contextmanager
-    @deprecated('1.3', alternative='suppress')
-    @contextmanager
-    def ignored(*exceptions):
-        """A context manager for ignoring exceptions.  Equivalent to::
-
-            try:
-                <body>
-            except exceptions:
-                pass
-
-        Example::
-
-            >>> import os
-            >>> with ignored(OSError):
-            ...     os.remove('file-that-does-not-exist')
-
-        """
-        try:
-            yield
-        except exceptions:
-            pass
-
-
-try:
     from contextlib import suppress
 except ImportError:
     from contextlib import contextmanager
+
     @contextmanager
     def suppress(*exceptions):
         """A context manager for ignoring exceptions.  Equivalent to::
@@ -163,7 +135,7 @@ if sys.version_info[0] == 3 and sys.version_info[:3] < (3, 4, 4):
         namedtuple : collections.namedtuple
             The named tuple to get the dict of
         """
-        return {fi:getattr(namedtuple, fi) for fi in namedtuple._fields}
+        return {fi: getattr(namedtuple, fi) for fi in namedtuple._fields}
 else:
     def namedtuple_asdict(namedtuple):
         """

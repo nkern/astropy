@@ -140,7 +140,6 @@ class CompImageHeader(Header):
 
         super(CompImageHeader, self).__setitem__(key, value)
 
-
         if index is not None:
             remapped_keyword = self._remap_keyword(keyword)
             self._table_header[remapped_keyword, index] = value
@@ -195,7 +194,13 @@ class CompImageHeader(Header):
 
         remapped_keyword = self._remap_keyword(card.keyword)
         card = Card(remapped_keyword, card.value, card.comment)
-        self._table_header.append(card=card, useblanks=useblanks,
+
+        # Here we disable the use of blank cards, because the call above to
+        # Header.append may have already deleted a blank card in the table
+        # header, thanks to inheritance: Header.append calls 'del self[-1]'
+        # to delete a blank card, which calls CompImageHeader.__deltitem__,
+        # which deletes the blank card both in the image and the table headers!
+        self._table_header.append(card=card, useblanks=False,
                                   bottom=bottom, end=end)
 
     def insert(self, key, card, useblanks=True, after=False):
@@ -238,7 +243,12 @@ class CompImageHeader(Header):
 
         card = Card(remapped_keyword, card.value, card.comment)
 
-        self._table_header.insert(remapped_index, card, useblanks=useblanks,
+        # Here we disable the use of blank cards, because the call above to
+        # Header.insert may have already deleted a blank card in the table
+        # header, thanks to inheritance: Header.insert calls 'del self[-1]'
+        # to delete a blank card, which calls CompImageHeader.__delitem__,
+        # which deletes the blank card both in the image and the table headers!
+        self._table_header.insert(remapped_index, card, useblanks=False,
                                   after=after)
 
     def _update(self, card):
@@ -1497,7 +1507,6 @@ class CompImageHDU(BinTableHDU):
         else:
             image_header.set('XTENSION', 'IMAGE', before=0)
 
-
         image_header.set('BITPIX', self._header['ZBITPIX'],
                          self._header.comments['ZBITPIX'], before=1)
 
@@ -1611,7 +1620,7 @@ class CompImageHDU(BinTableHDU):
 
             _format = BITPIX2DTYPE[self.header['BITPIX']]
 
-        return (self.name, class_name, len(self.header), _shape,
+        return (self.name, self.ver, class_name, len(self.header), _shape,
                 _format)
 
     def _update_compressed_data(self):
@@ -1640,7 +1649,13 @@ class CompImageHDU(BinTableHDU):
             should_swap = not self.data.dtype.isnative
 
         if should_swap:
-            self.data.byteswap(True)
+
+            if self.data.flags.writeable:
+                self.data.byteswap(True)
+            else:
+                # For read-only arrays, there is no way around making
+                # a byteswapped copy of the data.
+                self.data = self.data.byteswap(False)
 
         try:
             nrows = self._header['NAXIS2']
@@ -1653,7 +1668,6 @@ class CompImageHDU(BinTableHDU):
 
             # First delete the original compressed data, if it exists
             del self.compressed_data
-
 
             # Compress the data.
             # The current implementation of compress_hdu assumes the empty

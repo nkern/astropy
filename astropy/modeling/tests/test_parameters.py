@@ -8,6 +8,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import itertools
 
+import pytest
 import numpy as np
 from numpy.testing import utils
 
@@ -16,7 +17,6 @@ from .. import models, fitting
 from ..core import Model, FittableModel
 from ..parameters import Parameter, InputParameterError
 from ...utils.data import get_pkg_data_filename
-from ...tests.helper import pytest
 
 
 def setter1(val):
@@ -37,7 +37,7 @@ class SetterModel(FittableModel):
     yc = Parameter(default=1, setter=setter2)
 
     def __init__(self, xc, yc, p):
-        self.p = p # p is a value intended to be used by the setter
+        self.p = p  # p is a value intended to be used by the setter
         super(SetterModel, self).__init__()
         self.xc = xc
         self.yc = yc
@@ -474,7 +474,7 @@ class TestParameterInitialization(object):
         assert np.issubdtype(t.param_sets.dtype, object)
         assert np.all(t.param_sets[0] == [[10], [20]])
         assert np.all(t.param_sets[1] == [[1, 2], [3, 4]])
-        assert np.all(t.parameters  == [10, 20, 1, 2, 3, 4])
+        assert np.all(t.parameters == [10, 20, 1, 2, 3, 4])
         assert t.coeff.shape == ()
         assert t.e.shape == (2,)
 
@@ -615,7 +615,7 @@ def test_non_broadcasting_parameters():
 
 
 def test_setter():
-    pars = np.random.rand(20).reshape((10,2))
+    pars = np.random.rand(20).reshape((10, 2))
 
     model = SetterModel(-1, 3, np.pi)
 

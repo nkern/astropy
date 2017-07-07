@@ -7,10 +7,11 @@ import gc
 import locale
 import re
 
+import pytest
 from numpy.testing import assert_array_equal, assert_array_almost_equal
 import numpy as np
 
-from ...tests.helper import pytest, raises, catch_warnings
+from ...tests.helper import raises, catch_warnings
 from ...io import fits
 from .. import wcs
 from .. import _wcs
@@ -707,7 +708,7 @@ def test_specsys():
 
 
 def test_sptr():
-    #TODO: Write me
+    # TODO: Write me
     pass
 
 
@@ -752,6 +753,7 @@ def test_velangl():
     assert w.velangl == 42.0
     del w.velangl
     assert np.isnan(w.velangl)
+
 
 def test_velosys():
     w = _wcs.Wcsprm()
@@ -1005,12 +1007,12 @@ def test_iteration():
          [0.00664326, -0.5],
          [-0.58995335, -0.25],
          [0.00664326, -0.25],
-         [-0.58995335,  0.],
-         [0.00664326,  0.],
-         [-0.58995335,  0.25],
-         [0.00664326,  0.25],
-         [-0.58995335,  0.5],
-         [0.00664326,  0.5]],
+         [-0.58995335, 0.],
+         [0.00664326, 0.],
+         [-0.58995335, 0.25],
+         [0.00664326, 0.25],
+         [-0.58995335, 0.5],
+         [0.00664326, 0.5]],
         np.float
     )
 

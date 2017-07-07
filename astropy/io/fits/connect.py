@@ -165,6 +165,10 @@ def read_table_fits(input, hdu=None):
     for key, value, comment in table.header.cards:
 
         if key in ['COMMENT', 'HISTORY']:
+            # Convert to io.ascii format
+            if key == 'COMMENT':
+                key = 'comments'
+
             if key in t.meta:
                 t.meta[key].append(value)
             else:
@@ -215,6 +219,7 @@ def write_table_fits(input, output, overwrite=False):
             raise IOError("File exists: {0}".format(output))
 
     table_hdu.writeto(output)
+
 
 io_registry.register_reader('fits', Table, read_table_fits)
 io_registry.register_writer('fits', Table, write_table_fits)

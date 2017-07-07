@@ -5,11 +5,8 @@ Astropy
 .. image:: https://img.shields.io/pypi/v/astropy.svg
     :target: https://pypi.python.org/pypi/astropy
 
-.. image:: https://img.shields.io/pypi/dm/astropy.svg
-    :target: https://pypi.python.org/pypi/astropy
-
 .. image:: https://badges.gitter.im/Join%20Chat.svg
-    :target: https://gitter.im/astropy/astropy 
+    :target: https://gitter.im/astropy/astropy
 
 Astropy (http://astropy.org/) is a package intended to contain much of
 the core functionality and some common tools needed for performing
@@ -34,17 +31,24 @@ Project Status
 
 .. image:: https://travis-ci.org/astropy/astropy.svg
     :target: https://travis-ci.org/astropy/astropy
+    :alt: Astropy's Travis CI Status
 
 .. image:: https://coveralls.io/repos/astropy/astropy/badge.svg
     :target: https://coveralls.io/r/astropy/astropy
+    :alt: Astropy's Coveralls Status
 
 .. image:: https://ci.appveyor.com/api/projects/status/ym7lxajcs5qwm31e/branch/master?svg=true
     :target: https://ci.appveyor.com/project/Astropy/astropy/branch/master
+    :alt: Astropy's Appveyor Status
 
-For an overview of the testing and build status of all packages associated 
+For an overview of the testing and build status of all packages associated
 with the Astropy Project, see http://dashboard.astropy.org.
+
+.. image:: https://img.shields.io/badge/powered%20by-NumFOCUS-orange.svg?style=flat&colorA=E1523D&colorB=007D8A
+    :target: http://numfocus.org
+    :alt: Powered by NumFOCUS
 
 License
 -------
 Astropy is licensed under a 3-clause BSD style license - see the
-``licenses/LICENSE.rst`` file.
+``LICENSE.rst`` file.

@@ -21,9 +21,12 @@ from collections import OrderedDict
 
 # LOCAL
 from ...utils.data import get_readable_fileobj
+from ...utils.decorators import deprecated
 from ...utils.exceptions import AstropyUserWarning
 
 
+@deprecated(
+    '2.0', alternative='astroquery.vo_conesearch.validator.tstquery.parse_cs')
 def parse_cs(id):
     """Return ``<testQuery>`` pars as dict for given Resource ID."""
     if isinstance(id, bytes):  # pragma: py3
@@ -46,7 +49,7 @@ def parse_cs(id):
         with get_readable_fileobj(url, encoding='binary',
                                   show_progress=False) as fd:
             dom = minidom.parse(fd)
-    except Exception as e: # pragma: no cover
+    except Exception as e:  # pragma: no cover
         try:
             warnings.warn('{0} raised {1}, trying {2}'.format(
                 url, str(e), backup_url), AstropyUserWarning)
@@ -69,7 +72,7 @@ def parse_cs(id):
                     urls_failed = True
                     urls_errmsg = ('Incomplete testQuery for {0}, '
                                    'using default'.format(id))
-        else: # pragma: no cover
+        else:  # pragma: no cover
             urls_failed = True
             urls_errmsg = 'No testQuery found for {0}, using default'.format(id)
 

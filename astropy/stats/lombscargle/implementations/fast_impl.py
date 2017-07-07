@@ -54,7 +54,7 @@ def lombscargle_fast(t, y, dy, f0, df, Nf,
     .. [1] Press W.H. and Rybicki, G.B, "Fast algorithm for spectral analysis
         of unevenly sampled data". ApJ 1:338, p277, 1989
     .. [2] M. Zechmeister and M. Kurster, A&A 496, 577-584 (2009)
-    .. [3] W. Press et al, Numerical Recipies in C (2002)
+    .. [3] W. Press et al, Numerical Recipes in C (2002)
     """
     if dy is None:
         dy = 1
@@ -84,7 +84,7 @@ def lombscargle_fast(t, y, dy, f0, df, Nf,
     kwargs = dict.copy(trig_sum_kwds or {})
     kwargs.update(f0=f0, df=df, use_fft=use_fft, N=Nf)
 
-    #----------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # 1. compute functions of the time-shift tau at each frequency
     Sh, Ch = trig_sum(t, w * y, **kwargs)
     S2, C2 = trig_sum(t, w, freq_factor=2, **kwargs)
@@ -107,7 +107,7 @@ def lombscargle_fast(t, y, dy, f0, df, Nf,
     Cw = np.sqrt(0.5) * np.sqrt(1 + C2w)
     Sw = np.sqrt(0.5) * np.sign(S2w) * np.sqrt(1 - C2w)
 
-    #----------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # 2. Compute the periodogram, following Zechmeister & Kurster
     #    and using tricks from Press & Rybicki.
     YY = np.dot(w, y ** 2)

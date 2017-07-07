@@ -20,20 +20,26 @@ from __future__ import (absolute_import, division, print_function,
 import heapq
 import inspect
 import subprocess
+from warnings import warn
 
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import numpy as np
 
+from .. import units as u
 from ..utils.compat import suppress
 from ..utils.compat.funcsigs import signature
+from ..utils.exceptions import AstropyWarning
 from ..extern import six
 from ..extern.six.moves import range
 
+from .representation import REPRESENTATION_CLASSES
 
 __all__ = ['TransformGraph', 'CoordinateTransform', 'FunctionTransform',
-           'StaticMatrixTransform', 'DynamicMatrixTransform', 'CompositeTransform']
+           'BaseAffineTransform', 'AffineTransform',
+           'StaticMatrixTransform', 'DynamicMatrixTransform',
+           'FunctionTransformWithFiniteDifference', 'CompositeTransform']
 
 
 class TransformGraph(object):
@@ -70,6 +76,19 @@ class TransformGraph(object):
 
         return self._cached_frame_set.copy()
 
+    @property
+    def frame_attributes(self):
+        """
+        A `dict` of all the attributes of all frame classes in this `TransformGraph`.
+        """
+        if self._cached_frame_attributes is None:
+            result = {}
+            for frame_cls in self.frame_set:
+                result.update(frame_cls.frame_attributes)
+            self._cached_frame_attributes = result
+
+        return self._cached_frame_attributes
+
     def invalidate_cache(self):
         """
         Invalidates the cache that stores optimizations for traversing the
@@ -79,6 +98,7 @@ class TransformGraph(object):
         """
         self._cached_names_dct = None
         self._cached_frame_set = None
+        self._cached_frame_attributes = None
         self._shortestpaths = {}
         self._composite_cache = {}
 
@@ -199,7 +219,7 @@ class TransformGraph(object):
             t = self._graph[fromsys][tosys]
             return [fromsys, tosys], float(t.priority if hasattr(t, 'priority') else 1)
 
-        #otherwise, need to construct the path:
+        # otherwise, need to construct the path:
 
         if fromsys in self._shortestpaths:
             # already have a cached result
@@ -362,7 +382,7 @@ class TransformGraph(object):
         return list(six.iterkeys(self._cached_names))
 
     def to_dot_graph(self, priorities=True, addnodes=[], savefn=None,
-                     savelayout='plain', saveformat=None):
+                     savelayout='plain', saveformat=None, color_edges=True):
         """
         Converts this transform graph to the graphviz_ DOT format.
 
@@ -389,6 +409,10 @@ class TransformGraph(object):
             The graphviz output format. (e.g. the ``-Txxx`` option for
             the command line program - see graphviz docs for details).
             Ignored if ``savefn`` is `None`.
+        color_edges : bool
+            Color the edges between two nodes (frames) based on the type of
+            transform. ``FunctionTransform``: red, ``StaticMatrixTransform``:
+            blue, ``DynamicMatrixTransform``: green.
 
         Returns
         -------
@@ -420,15 +444,27 @@ class TransformGraph(object):
         for a in self._graph:
             agraph = self._graph[a]
             for b in agraph:
-                pri = agraph[b].priority if hasattr(agraph[b], 'priority') else 1
-                edgenames.append((a.__name__, b.__name__, pri))
+                transform = agraph[b]
+                pri = transform.priority if hasattr(transform, 'priority') else 1
+                color = trans_to_color[transform.__class__] if color_edges else 'black'
+                edgenames.append((a.__name__, b.__name__, pri, color))
 
         # generate simple dot format graph
         lines = ['digraph AstropyCoordinateTransformGraph {']
         lines.append('; '.join(nodenames) + ';')
-        for enm1, enm2, weights in edgenames:
-            labelstr = '[ label = "{0}" ]'.format(weights) if priorities else ''
+        for enm1, enm2, weights, color in edgenames:
+            labelstr_fmt = '[ {0} {1} ]'
+
+            if priorities:
+                priority_part = 'label = "{0}"'.format(weights)
+            else:
+                priority_part = ''
+
+            color_part = 'color = "{0}"'.format(color)
+
+            labelstr = labelstr_fmt.format(priority_part, color_part)
             lines.append('{0} -> {1}{2};'.format(enm1, enm2, labelstr))
+
         lines.append('')
         lines.append('overlap=false')
         lines.append('}')
@@ -483,12 +519,14 @@ class TransformGraph(object):
         for a in self._graph:
             agraph = self._graph[a]
             for b in agraph:
-                pri = agraph[b].priority if hasattr(agraph[b], 'priority') else 1
-                nxgraph.add_edge(a, b, weight=pri)
+                transform = agraph[b]
+                pri = transform.priority if hasattr(transform, 'priority') else 1
+                color = trans_to_color[transform.__class__]
+                nxgraph.add_edge(a, b, weight=pri, color=color)
 
         return nxgraph
 
-    def transform(self, transcls, fromsys, tosys, priority=1):
+    def transform(self, transcls, fromsys, tosys, priority=1, **kwargs):
         """
         A function decorator for defining transformations.
 
@@ -507,6 +545,9 @@ class TransformGraph(object):
         priority : number
             The priority if this transform when finding the shortest
             coordinate transform path - large numbers are lower priorities.
+
+        Additional keyword arguments are passed into the ``transcls``
+        constructor.
 
         Returns
         -------
@@ -547,12 +588,12 @@ class TransformGraph(object):
             # ``register_graph=self`` stores it in the transform graph
             # automatically
             transcls(func, fromsys, tosys, priority=priority,
-                     register_graph=self)
+                     register_graph=self, **kwargs)
             return func
         return deco
 
 
-#<--------------------Define the builtin transform classes--------------------->
+# <-------------------Define the builtin transform classes-------------------->
 
 @six.add_metaclass(ABCMeta)
 class CoordinateTransform(object):
@@ -596,8 +637,8 @@ class CoordinateTransform(object):
         self.overlapping_frame_attr_names = overlap = []
         if (hasattr(fromsys, 'get_frame_attr_names') and
                 hasattr(tosys, 'get_frame_attr_names')):
-            #the if statement is there so that non-frame things might be usable
-            #if it makes sense
+            # the if statement is there so that non-frame things might be usable
+            # if it makes sense
             for from_nm in fromsys.get_frame_attr_names():
                 if from_nm in tosys.get_frame_attr_names():
                     overlap.append(from_nm)
@@ -687,6 +728,7 @@ class FunctionTransform(CoordinateTransform):
 
 
     """
+
     def __init__(self, func, fromsys, tosys, priority=1, register_graph=None):
         if not six.callable(func):
             raise TypeError('func must be callable')
@@ -708,10 +750,389 @@ class FunctionTransform(CoordinateTransform):
         if not isinstance(res, self.tosys):
             raise TypeError('the transformation function yielded {0} but '
                 'should have been of type {1}'.format(res, self.tosys))
+        if fromcoord.data.differentials and not res.data.differentials:
+            warn("Applied a FunctionTransform to a coordinate frame with "
+                 "differentials, but the FunctionTransform does not handle "
+                 "differentials, so they have been dropped.", AstropyWarning)
         return res
 
 
-class StaticMatrixTransform(CoordinateTransform):
+class FunctionTransformWithFiniteDifference(FunctionTransform):
+    r"""
+    A coordinate transformation that works like a `FunctionTransform`, but
+    computes velocity shifts based on the finite-difference relative to one of
+    the frame attributes.  Note that the transform function should *not* change
+    the differential at all in this case, as any differentials will be
+    overridden.
+
+    When a differential is in the from coordinate, the finite difference
+    calculation has two components. The first part is simple the existing
+    differential, but re-orientation (using finite-difference techniques) to
+    point in the direction the velocity vector has in the *new* frame. The
+    second component is the "induced" velocity.  That is, the velocity
+    intrinsic to the frame itself, estimated by shifting the frame using the
+    ``finite_difference_frameattr_name`` frame attribute a small amount
+    (``finite_difference_dt``) in time and re-calculating the position.
+
+    Parameters
+    ----------
+    finite_difference_frameattr_name : str or None
+        The name of the frame attribute on the frames to use for the finite
+        difference.  Both the to and the from frame will be checked for this
+        attribute, but only one needs to have it. If None, no velocity
+        component induced from the frame itself will be included - only the
+        re-orientation of any exsiting differential.
+    finite_difference_dt : `~astropy.units.Quantity` or callable
+        If a quantity, this is the size of the differential used to do the
+        finite difference.  If a callable, should accept
+        ``(fromcoord, toframe)`` and return the ``dt`` value.
+    symmetric_finite_difference : bool
+        If True, the finite difference is computed as
+        :math:`\frac{x(t + \Delta t / 2) - x(t + \Delta t / 2)}{\Delta t}`, or
+        if False, :math:`\frac{x(t + \Delta t) - x(t)}{\Delta t}`.  The latter
+        case has slightly better performance (and more stable finite difference
+        behavior).
+
+    All other parameters are identical to the initializer for
+    `FunctionTransform`.
+
+    """
+
+    def __init__(self, func, fromsys, tosys, priority=1, register_graph=None,
+                 finite_difference_frameattr_name='obstime',
+                 finite_difference_dt=1*u.second,
+                 symmetric_finite_difference=True):
+        super(FunctionTransformWithFiniteDifference, self).__init__(func,
+              fromsys, tosys, priority, register_graph)
+        self.finite_difference_frameattr_name = finite_difference_frameattr_name
+        self.finite_difference_dt = finite_difference_dt
+        self.symmetric_finite_difference = symmetric_finite_difference
+
+    @property
+    def finite_difference_frameattr_name(self):
+        return self._finite_difference_frameattr_name
+
+    @finite_difference_frameattr_name.setter
+    def finite_difference_frameattr_name(self, value):
+        if value is None:
+            self._diff_attr_in_fromsys = self._diff_attr_in_tosys = False
+        else:
+            diff_attr_in_fromsys = value in self.fromsys.frame_attributes
+            diff_attr_in_tosys = value in self.tosys.frame_attributes
+            if diff_attr_in_fromsys or diff_attr_in_tosys:
+                self._diff_attr_in_fromsys = diff_attr_in_fromsys
+                self._diff_attr_in_tosys = diff_attr_in_tosys
+            else:
+                raise ValueError('Frame attribute name {} is not a frame '
+                                 'attribute of {} or {}'.format(value,
+                                                                self.fromsys,
+                                                                self.tosys))
+        self._finite_difference_frameattr_name = value
+
+    def __call__(self, fromcoord, toframe):
+        from .representation import (CartesianRepresentation,
+                                     CartesianDifferential)
+
+        supcall = self.func
+        if fromcoord.data.differentials:
+            # this is the finite difference case
+
+            if callable(self.finite_difference_dt):
+                dt = self.finite_difference_dt(fromcoord, toframe)
+            else:
+                dt = self.finite_difference_dt
+            halfdt = dt/2
+
+            from_diffless = fromcoord.realize_frame(fromcoord.data.without_differentials())
+            reprwithoutdiff = supcall(from_diffless, toframe)
+
+            # first we use the existing differential to compute an offset due to
+            # the already-existing velocity, but in the new frame
+            fromcoord_cart = fromcoord.cartesian
+            if self.symmetric_finite_difference:
+                fwdxyz = (fromcoord_cart.xyz +
+                          fromcoord_cart.differentials['s'].d_xyz*halfdt)
+                fwd = supcall(fromcoord.realize_frame(CartesianRepresentation(fwdxyz)), toframe)
+                backxyz = (fromcoord_cart.xyz -
+                           fromcoord_cart.differentials['s'].d_xyz*halfdt)
+                back = supcall(fromcoord.realize_frame(CartesianRepresentation(backxyz)), toframe)
+            else:
+                fwdxyz = (fromcoord_cart.xyz +
+                          fromcoord_cart.differentials['s'].d_xyz*dt)
+                fwd = supcall(fromcoord.realize_frame(CartesianRepresentation(fwdxyz)), toframe)
+                back = reprwithoutdiff
+            diffxyz = (fwd.cartesian - back.cartesian).xyz / dt
+
+            # now we compute the "induced" velocities due to any movement in
+            # the frame itself over time
+            attrname = self.finite_difference_frameattr_name
+            if attrname is not None:
+                if self.symmetric_finite_difference:
+                    if self._diff_attr_in_fromsys:
+                        kws = {attrname: getattr(from_diffless, attrname) + halfdt}
+                        from_diffless_fwd = from_diffless.replicate(**kws)
+                    else:
+                        from_diffless_fwd = from_diffless
+                    if self._diff_attr_in_tosys:
+                        kws = {attrname: getattr(toframe, attrname) + halfdt}
+                        fwd_frame = toframe.replicate_without_data(**kws)
+                    else:
+                        fwd_frame = toframe
+                    fwd = supcall(from_diffless_fwd, fwd_frame)
+
+                    if self._diff_attr_in_fromsys:
+                        kws = {attrname: getattr(from_diffless, attrname) - halfdt}
+                        from_diffless_back = from_diffless.replicate(**kws)
+                    else:
+                        from_diffless_back = from_diffless
+                    if self._diff_attr_in_tosys:
+                        kws = {attrname: getattr(toframe, attrname) - halfdt}
+                        back_frame = toframe.replicate_without_data(**kws)
+                    else:
+                        back_frame = toframe
+                    back = supcall(from_diffless_back, back_frame)
+                else:
+                    if self._diff_attr_in_fromsys:
+                        kws = {attrname: getattr(from_diffless, attrname) + dt}
+                        from_diffless_fwd = from_diffless.replicate(**kws)
+                    else:
+                        from_diffless_fwd = from_diffless
+                    if self._diff_attr_in_tosys:
+                        kws = {attrname: getattr(toframe, attrname) + dt}
+                        fwd_frame = toframe.replicate_without_data(**kws)
+                    else:
+                        fwd_frame = toframe
+                    fwd = supcall(from_diffless_fwd, fwd_frame)
+                    back = reprwithoutdiff
+
+                diffxyz += (fwd.cartesian - back.cartesian).xyz / dt
+
+            newdiff = CartesianDifferential(diffxyz)
+            reprwithdiff = reprwithoutdiff.data.to_cartesian().with_differentials(newdiff)
+            return reprwithoutdiff.realize_frame(reprwithdiff)
+        else:
+            return supcall(fromcoord, toframe)
+
+
+class BaseAffineTransform(CoordinateTransform):
+    """Base class for common functionality between the ``AffineTransform``-type
+    subclasses.
+
+    This base class is needed because ``AffineTransform`` and the matrix
+    transform classes share the ``_apply_transform()`` method, but have
+    different ``__call__()`` methods. ``StaticMatrixTransform`` passes in a
+    matrix stored as a class attribute, and both of the matrix transforms pass
+    in ``None`` for the offset. Hence, user subclasses would likely want to
+    subclass this (rather than ``AffineTransform``) if they want to provide
+    alternative transformations using this machinery.
+    """
+
+    def _apply_transform(self, fromcoord, matrix, offset):
+        from .representation import (UnitSphericalRepresentation,
+                                     CartesianDifferential,
+                                     SphericalDifferential,
+                                     SphericalCosLatDifferential,
+                                     RadialDifferential)
+
+        data = fromcoord.data
+        has_velocity = 's' in data.differentials
+
+        # list of unit differentials
+        _unit_diffs = (SphericalDifferential._unit_differential,
+                       SphericalCosLatDifferential._unit_differential)
+        unit_vel_diff = (has_velocity and
+                         isinstance(data.differentials['s'], _unit_diffs))
+        rad_vel_diff = (has_velocity and
+                        isinstance(data.differentials['s'], RadialDifferential))
+
+        # Some initial checking to short-circuit doing any re-representation if
+        # we're going to fail anyways:
+        if isinstance(data, UnitSphericalRepresentation) and offset is not None:
+            raise TypeError("Position information stored on coordiante frame "
+                            "is insufficient to do a full-space position "
+                            "transformation (representation class: {0})"
+                            .format(data.__class__))
+
+        elif (has_velocity and (unit_vel_diff or rad_vel_diff) and
+              offset is not None and 's' in offset.differentials):
+            # Coordinate has a velocity, but it is not a full-space velocity
+            # that we need to do a velocity offset
+            raise TypeError("Velocity information stored on coordinate frame "
+                            "is insufficient to do a full-space velocity "
+                            "transformation (differential class: {0})"
+                            .format(data.differentials['s'].__class__))
+
+        elif len(data.differentials) > 1:
+            # We should never get here because the frame initializer shouldn't
+            # allow more differentials, but this just adds protection for
+            # subclasses that somehow skip the checks
+            raise ValueError("Representation passed to AffineTransform contains"
+                             " multiple associated differentials. Only a single"
+                             " differential with velocity units is presently"
+                             " supported (differentials: {0})."
+                             .format(str(data.differentials)))
+
+        # If the representation is a UnitSphericalRepresentation, and this is
+        # just a MatrixTransform, we have to try to turn the differential into a
+        # Unit version of the differential (if no radial velocity) or a
+        # sphericaldifferential with zero proper motion (if only a radial
+        # velocity) so that the matrix operation works
+        if (has_velocity and isinstance(data, UnitSphericalRepresentation) and
+                not unit_vel_diff and not rad_vel_diff):
+            # retrieve just velocity differential
+            unit_diff = data.differentials['s'].represent_as(
+                data.differentials['s']._unit_differential, data)
+            data = data.with_differentials({'s': unit_diff})  # updates key
+
+        # If it's a RadialDifferential, we flat-out ignore the differentials
+        # This is because, by this point (past the validation above), we can
+        # only possibly be doing a rotation-only transformation, and that
+        # won't change the radial differential. We later add it back in
+        elif rad_vel_diff:
+            data = data.without_differentials()
+
+        # Convert the representation and differentials to cartesian without
+        # having them attached to a frame
+        rep = data.to_cartesian()
+        diffs = dict([(k, diff.represent_as(CartesianDifferential, data))
+                      for k, diff in data.differentials.items()])
+        rep = rep.with_differentials(diffs)
+
+        # Only do transform if matrix is specified. This is for speed in
+        # transformations that only specify an offset (e.g., LSR)
+        if matrix is not None:
+            # Note: this applies to both representation and differentials
+            rep = rep.transform(matrix)
+
+        # TODO: if we decide to allow arithmetic between representations that
+        # contain differentials, this can be tidied up
+        if offset is not None:
+            newrep = (rep.without_differentials() +
+                      offset.without_differentials())
+        else:
+            newrep = rep.without_differentials()
+
+        # We need a velocity (time derivative) and, for now, are strict: the
+        # representation can only contain a velocity differential and no others.
+        if has_velocity and not rad_vel_diff:
+            veldiff = rep.differentials['s']  # already in Cartesian form
+
+            if offset is not None and 's' in offset.differentials:
+                veldiff = veldiff + offset.differentials['s']
+
+            newrep = newrep.with_differentials({'s': veldiff})
+
+        if isinstance(fromcoord.data, UnitSphericalRepresentation):
+            # Special-case this because otherwise the return object will think
+            # it has a valid distance with the default return (a
+            # CartesianRepresentation instance)
+
+            if has_velocity and not unit_vel_diff and not rad_vel_diff:
+                # We have to first represent as the Unit types we converted to,
+                # then put the d_distance information back in to the
+                # differentials and re-represent as their original forms
+                newdiff = newrep.differentials['s']
+                _unit_cls = fromcoord.data.differentials['s']._unit_differential
+                newdiff = newdiff.represent_as(_unit_cls, newrep)
+
+                kwargs = dict([(comp, getattr(newdiff, comp))
+                               for comp in newdiff.components])
+                kwargs['d_distance'] = fromcoord.data.differentials['s'].d_distance
+                diffs = {'s': fromcoord.data.differentials['s'].__class__(
+                    copy=False, **kwargs)}
+
+            elif has_velocity and unit_vel_diff:
+                newdiff = newrep.differentials['s'].represent_as(
+                    fromcoord.data.differentials['s'].__class__, newrep)
+                diffs = {'s': newdiff}
+
+            else:
+                diffs = newrep.differentials
+
+            newrep = newrep.represent_as(fromcoord.data.__class__)  # drops diffs
+            newrep = newrep.with_differentials(diffs)
+
+        elif has_velocity and unit_vel_diff:
+            # Here, we're in the case where the representation is not
+            # UnitSpherical, but the differential *is* one of the UnitSpherical
+            # types. We have to convert back to that differential class or the
+            # resulting frame will think it has a valid radial_velocity. This
+            # can probably be cleaned up: we currently have to go through the
+            # dimensional version of the differential before representing as the
+            # unit differential so that the units work out (the distance length
+            # unit shouldn't appear in the resulting proper motions)
+
+            diff_cls = fromcoord.data.differentials['s'].__class__
+            newrep = newrep.represent_as(fromcoord.data.__class__,
+                                         diff_cls._dimensional_differential)
+            newrep = newrep.represent_as(fromcoord.data.__class__, diff_cls)
+
+        # We pulled the radial differential off of the representation
+        # earlier, so now we need to put it back. But, in order to do that, we
+        # have to turn the representation into a repr that is compatible with
+        # having a RadialDifferential
+        if has_velocity and rad_vel_diff:
+            newrep = newrep.represent_as(fromcoord.data.__class__)
+            newrep = newrep.with_differentials(
+                {'s': fromcoord.data.differentials['s']})
+
+        return newrep
+
+
+class AffineTransform(BaseAffineTransform):
+    """
+    A coordinate transformation specified as a function that yields a 3 x 3
+    cartesian transformation matrix and a tuple of displacement vectors.
+
+    See `~astropy.coordinates.builtin_frames.galactocentric.Galactocentric` for
+    an example.
+
+    Parameters
+    ----------
+    transform_func : callable
+        A callable that has the signature ``transform_func(fromcoord, toframe)``
+        and returns: a (3, 3) matrix that operates on ``fromcoord`` in a
+        Cartesian representation, and a ``CartesianRepresentation`` with
+        (optionally) an attached velocity ``CartesianDifferential`` to represent
+        a translation and offset in velocity to apply after the matrix
+        operation.
+    fromsys : class
+        The coordinate frame class to start from.
+    tosys : class
+        The coordinate frame class to transform into.
+    priority : number
+        The priority if this transform when finding the shortest
+        coordinate transform path - large numbers are lower priorities.
+    register_graph : `TransformGraph` or `None`
+        A graph to register this transformation with on creation, or
+        `None` to leave it unregistered.
+
+    Raises
+    ------
+    TypeError
+        If ``transform_func`` is not callable
+
+    """
+
+    def __init__(self, transform_func, fromsys, tosys, priority=1,
+                 register_graph=None):
+
+        if not six.callable(transform_func):
+            raise TypeError('transform_func is not callable')
+        self.transform_func = transform_func
+
+        super(AffineTransform, self).__init__(fromsys, tosys, priority=priority,
+                                              register_graph=register_graph)
+
+    def __call__(self, fromcoord, toframe):
+
+        M, vec = self.transform_func(fromcoord, toframe)
+        newrep = self._apply_transform(fromcoord, M, vec)
+
+        return toframe.realize_frame(newrep)
+
+
+class StaticMatrixTransform(BaseAffineTransform):
     """
     A coordinate transformation defined as a 3 x 3 cartesian
     transformation matrix.
@@ -743,6 +1164,7 @@ class StaticMatrixTransform(CoordinateTransform):
         If the matrix is not 3 x 3
 
     """
+
     def __init__(self, matrix, fromsys, tosys, priority=1, register_graph=None):
         if six.callable(matrix):
             matrix = matrix()
@@ -752,24 +1174,15 @@ class StaticMatrixTransform(CoordinateTransform):
             raise ValueError('Provided matrix is not 3 x 3')
 
         super(StaticMatrixTransform, self).__init__(fromsys, tosys,
-            priority=priority, register_graph=register_graph)
+                                                    priority=priority,
+                                                    register_graph=register_graph)
 
     def __call__(self, fromcoord, toframe):
-        from .representation import UnitSphericalRepresentation
-
-        newrep = fromcoord.cartesian.transform(self.matrix)
-        if issubclass(fromcoord.data.__class__, UnitSphericalRepresentation):
-            #need to special-case this because otherwise the new class will
-            #think it has a valid distance
-            newrep = newrep.represent_as(fromcoord.data.__class__)
-
-        frameattrs = dict([(attrnm, getattr(fromcoord, attrnm))
-                           for attrnm in self.overlapping_frame_attr_names])
-
-        return toframe.realize_frame(newrep, **frameattrs)
+        newrep = self._apply_transform(fromcoord, self.matrix, None)
+        return toframe.realize_frame(newrep)
 
 
-class DynamicMatrixTransform(CoordinateTransform):
+class DynamicMatrixTransform(BaseAffineTransform):
     """
     A coordinate transformation specified as a function that yields a
     3 x 3 cartesian transformation matrix.
@@ -800,30 +1213,23 @@ class DynamicMatrixTransform(CoordinateTransform):
         If ``matrix_func`` is not callable
 
     """
+
     def __init__(self, matrix_func, fromsys, tosys, priority=1,
                  register_graph=None):
         if not six.callable(matrix_func):
             raise TypeError('matrix_func is not callable')
         self.matrix_func = matrix_func
 
+        def _transform_func(fromcoord, toframe):
+            return self.matrix_func(fromcoord, toframe), None
+
         super(DynamicMatrixTransform, self).__init__(fromsys, tosys,
-            priority=priority, register_graph=register_graph)
+                                                     priority=priority,
+                                                     register_graph=register_graph)
 
     def __call__(self, fromcoord, toframe):
-
-        from .representation import CartesianRepresentation, \
-                                    UnitSphericalRepresentation
-
-        transform_matrix = self.matrix_func(fromcoord, toframe)
-
-        rep = fromcoord.represent_as(CartesianRepresentation)
-        newrep = rep.transform(transform_matrix)
-
-        if issubclass(fromcoord.data.__class__, UnitSphericalRepresentation):
-            #need to special-case this because otherwise the new class will
-            #think it has a valid distance
-            newrep = newrep.represent_as(fromcoord.data.__class__)
-
+        M = self.matrix_func(fromcoord, toframe)
+        newrep = self._apply_transform(fromcoord, M, None)
         return toframe.realize_frame(newrep)
 
 
@@ -856,6 +1262,7 @@ class CompositeTransform(CoordinateTransform):
         single transformation to speed up the calculation.
 
     """
+
     def __init__(self, transforms, fromsys, tosys, priority=1,
                  register_graph=None, collapse_static_mats=True):
         super(CompositeTransform, self).__init__(fromsys, tosys,
@@ -889,10 +1296,10 @@ class CompositeTransform(CoordinateTransform):
     def __call__(self, fromcoord, toframe):
         curr_coord = fromcoord
         for t in self.transforms:
-            #build an intermediate frame with attributes taken from either
-            #`fromframe`, or if not there, `toframe`, or if not there, use
-            #the defaults
-            #TODO: caching this information when creating the transform may
+            # build an intermediate frame with attributes taken from either
+            # `fromframe`, or if not there, `toframe`, or if not there, use
+            # the defaults
+            # TODO: caching this information when creating the transform may
             # speed things up a lot
             frattrs = {}
             for inter_frame_attr_nm in t.tosys.get_frame_attr_names():
@@ -909,3 +1316,12 @@ class CompositeTransform(CoordinateTransform):
         # this is safe even in the case where self.transforms is empty, because
         # coordinate objects are immutible, so copying is not needed
         return curr_coord
+
+
+# map class names to colorblind-safe colors
+trans_to_color = OrderedDict()
+trans_to_color[AffineTransform] = '#555555'  # gray
+trans_to_color[FunctionTransform] = '#783001'  # dark red-ish/brown
+trans_to_color[FunctionTransformWithFiniteDifference] = '#d95f02'  # red-ish
+trans_to_color[StaticMatrixTransform] = '#7570b3'  # blue-ish
+trans_to_color[DynamicMatrixTransform] = '#1b9e77'  # green-ish

@@ -15,7 +15,7 @@ from ..file import _File
 from ..header import Header, _pad_length
 from ..util import (_is_int, _is_pseudo_unsigned, _unsigned_zero,
                     itersubclasses, decode_ascii, _get_array_mmap, first,
-                    _free_space_check)
+                    _free_space_check, _extract_number)
 from ..verify import _Verify, _ErrList
 
 from ....extern.six import string_types, add_metaclass
@@ -29,6 +29,8 @@ from ....utils.decorators import deprecated_renamed_argument
 
 class _Delayed(object):
     pass
+
+
 DELAYED = _Delayed()
 
 
@@ -86,6 +88,7 @@ def _hdu_class_from_header(cls, header):
                 break
 
     return klass
+
 
 class _BaseHDUMeta(type):
     def __init__(cls, name, bases, members):
@@ -324,7 +327,6 @@ class _BaseHDU(object):
         if not isinstance(fileobj, _File):
             fileobj = _File(fileobj)
 
-
         hdu = cls._readfrom_internal(fileobj, checksum=checksum,
                                      ignore_missing_end=ignore_missing_end,
                                      **kwargs)
@@ -334,7 +336,7 @@ class _BaseHDU(object):
         fileobj.seek(hdu._data_offset + hdu._data_size, os.SEEK_SET)
         return hdu
 
-    @deprecated_renamed_argument('clobber', 'overwrite', '1.3', pending=True)
+    @deprecated_renamed_argument('clobber', 'overwrite', '2.0')
     def writeto(self, name, output_verify='exception', overwrite=False,
                 checksum=False):
         """
@@ -461,7 +463,6 @@ class _BaseHDU(object):
             hdu._verify_checksum_datasum(checksum)
 
         return hdu
-
 
     def _get_raw_data(self, shape, code, offset):
         """
@@ -607,7 +608,6 @@ class _BaseHDU(object):
             # existing file or buffer
             size += self._writedata_direct_copy(fileobj)
 
-
         # flush, to make sure the content is written
         if not fileobj.simulateonly:
             fileobj.flush()
@@ -732,6 +732,7 @@ class _BaseHDU(object):
                 _get_array_mmap(self.data) is not None):
             del self.data
 
+
 # For backwards-compatibility, though nobody should have
 # been using this directly:
 _AllHDU = _BaseHDU
@@ -774,7 +775,7 @@ class _CorruptedHDU(_BaseHDU):
         return self._file.size - self._data_offset
 
     def _summary(self):
-        return (self.name, 'CorruptedHDU')
+        return (self.name, self.ver, 'CorruptedHDU')
 
     def verify(self):
         pass
@@ -856,7 +857,7 @@ class _NonstandardHDU(_BaseHDU, _Verify):
         return offset, size
 
     def _summary(self):
-        return (self.name, 'NonstandardHDU', len(self._header))
+        return (self.name, self.ver, 'NonstandardHDU', len(self._header))
 
     @lazyproperty
     def data(self):
@@ -999,9 +1000,11 @@ class _ValidHDU(_BaseHDU, _Verify):
         naxis = self._header.get('NAXIS', 0)
         if naxis < 1000:
             for ax in range(3, naxis + 3):
-                self.req_cards('NAXIS' + str(ax - 2), ax,
-                               lambda v: (_is_int(v) and v >= 0), 1, option,
-                               errs)
+                key = 'NAXIS' + str(ax - 2)
+                self.req_cards(key, ax,
+                               lambda v: (_is_int(v) and v >= 0),
+                               _extract_number(self._header[key], default=1),
+                               option, errs)
 
             # Remove NAXISj cards where j is not in range 1, naxis inclusive.
             for keyword in self._header:
@@ -1580,7 +1583,7 @@ class ExtensionHDU(_ValidHDU):
 
         raise NotImplementedError
 
-    @deprecated_renamed_argument('clobber', 'overwrite', '1.3', pending=True)
+    @deprecated_renamed_argument('clobber', 'overwrite', '2.0')
     def writeto(self, name, output_verify='exception', overwrite=False,
                 checksum=False):
         """
@@ -1611,6 +1614,8 @@ class ExtensionHDU(_ValidHDU):
                        1, option, errs)
 
         return errs
+
+
 # For backwards compatibility, though this needs to be deprecated
 # TODO: Mark this as deprecated
 _ExtensionHDU = ExtensionHDU
@@ -1651,7 +1656,7 @@ class NonstandardExtHDU(ExtensionHDU):
                 xtension not in standard_xtensions)
 
     def _summary(self):
-        return (self.name, 'NonstandardExtHDU', len(self._header))
+        return (self.name, self.ver, 'NonstandardExtHDU', len(self._header))
 
     @lazyproperty
     def data(self):
@@ -1660,6 +1665,7 @@ class NonstandardExtHDU(ExtensionHDU):
         """
 
         return self._get_raw_data(self.size, 'ubyte', self._data_offset)
+
 
 # TODO: Mark this as deprecated
 _NonstandardExtHDU = NonstandardExtHDU

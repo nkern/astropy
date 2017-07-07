@@ -76,7 +76,7 @@ except ImportError:
     __githash__ = ''
 
 
-__minimum_numpy_version__ = '1.7.0'
+__minimum_numpy_version__ = '1.9.0'
 
 
 # The location of the online documentation for astropy
@@ -118,6 +118,7 @@ if not _ASTROPY_SETUP_:
 
 from . import config as _config
 
+
 class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astropy`.
@@ -146,6 +147,7 @@ class Conf(_config.ConfigNamespace):
         'limit.',
         cfgtype='integer(default=None)',
         aliases=['astropy.table.pprint.max_width'])
+
 
 conf = Conf()
 
@@ -268,6 +270,7 @@ def _get_bibtex():
         return bibtexreference
     else:
         return ''
+
 
 __bibtex__ = _get_bibtex()
 

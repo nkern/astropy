@@ -3,7 +3,7 @@
 .. _logarithmic_units:
 
 Magnitudes and other Logarithmic Units
-======================================
+**************************************
 
 Magnitudes and logarithmic units such as ``dex`` and ``dB`` are used the
 logarithm of values relative to some reference value.  Quantities with such
@@ -11,7 +11,7 @@ units are supported in ``astropy`` via the :class:`~astropy.units.Magnitude`,
 :class:`~astropy.units.Dex`, and :class:`~astropy.units.Decibel` classes.
 
 Creating Logarithmic Quantities
--------------------------------
+===============================
 
 One can create logarithmic quantities either directly or by multiplication with
 a logarithmic unit.  For instance::
@@ -26,7 +26,7 @@ a logarithmic unit.  For instance::
   >>> -2.5 * u.mag(u.ct / u.s)
   <Magnitude -2.5 mag(ct / s)>
   >>> u.Dex((c.G * u.M_sun / u.R_sun**2).cgs)  # doctest: +FLOAT_CMP
-  <Dex 4.43842814841305 dex(cm / s2)>
+  <Dex 4.438067627303133 dex(cm / s2)>
   >>> np.linspace(2., 5., 7) * u.Unit("dex(cm/s2)")
   <Dex [ 2. , 2.5, 3. , 3.5, 4. , 4.5, 5. ] dex(cm / s2)>
 
@@ -51,7 +51,7 @@ to a |quantity| with the physical unit using the
     <Quantity 100000.0 cm / s2>
 
 Converting to different units
------------------------------
+=============================
 
 Like |quantity| objects, logarithmic quantities can be converted to different
 units, be it another logarithmic unit or a physical one::
@@ -70,7 +70,7 @@ to convert the |quantity| to base S.I. or c.g.s units::
     <Dex 3.0 dex(m / s2)>
 
 Arithmetic
-----------
+==========
 
 Addition and subtraction work as expected for logarithmic quantities,
 multiplying and dividing the physical units as appropriate.  It may be best
@@ -122,7 +122,7 @@ Here, ``ST`` is a short-hand for the ST zero-point flux::
 .. note:: at present, only magnitudes defined in terms of luminosity or flux
 	  are implemented, since those that do not depend on the filter the
           measurement was made with.  They include absolute and apparent
-          bolometric [M+15]_, ST [H+95]_ and AB [OG83]_ magnitudes.
+          bolometric [M15]_, ST [H95]_ and AB [OG83]_ magnitudes.
 
 Now applying the calibration, we find (note the proper change in units)::
 
@@ -179,7 +179,7 @@ the 5-5log rule::
     <Quantity 1000.0 pc>
 
 Numpy functions
----------------
+===============
 
 For logarithmic quantities, most numpy functions and many array methods do not
 make sense, hence they are disabled.  But one can use those one would expect to
@@ -197,7 +197,7 @@ work::
 	  please `let us know <http://www.astropy.org/contribute.html>`_.
 
 Dimensionless logarithmic quantities
-------------------------------------
+====================================
 
 Dimensionless quantities are treated somewhat specially, in that, if needed,
 logarithmic quantities will be converted to normal |quantity| objects with the
@@ -215,9 +215,9 @@ supported as logarithmic units.  For instance::
     <Decibel 80.0 dB(mW)>
 
 
-.. [M+15] Mamajek et al., 2015, `arXiv:1510.06262
+.. [M15] Mamajek et al., 2015, `arXiv:1510.06262
 	  <http://adsabs.harvard.edu/abs/2015arXiv151006262M>`_
-.. [H+95] E.g., Holtzman et al., 1995, `PASP 107, 1065
+.. [H95] E.g., Holtzman et al., 1995, `PASP 107, 1065
           <http://adsabs.harvard.edu/abs/1995PASP..107.1065H>`_
 .. [OG83] Oke, J.B., & Gunn, J. E., 1983, `ApJ 266, 713
 	  <http://adsabs.harvard.edu/abs/1983ApJ...266..713O>`_

@@ -16,7 +16,7 @@ from ...extern import six
 from ...extern.six.moves import zip
 from . import core
 
-latexdicts = {'AA':  {'tabletype': 'table',
+latexdicts = {'AA': {'tabletype': 'table',
                       'header_start': r'\hline \hline', 'header_end': r'\hline',
                       'data_end': r'\hline'},
               'doublelines': {'tabletype': 'table',
@@ -33,6 +33,7 @@ latexdicts = {'AA':  {'tabletype': 'table',
 
 
 RE_COMMENT = re.compile(r'(?<!\\)%')  # % character but not \%
+
 
 def add_dictval_to_list(adict, key, alist):
     '''
@@ -143,7 +144,8 @@ class LatexHeader(core.BaseHeader):
             align = '[' + self.latex['tablealign'] + ']'
         else:
             align = ''
-        lines.append(r'\begin{' + self.latex['tabletype'] + r'}' + align)
+        if self.latex['tabletype'] is not None:
+            lines.append(r'\begin{' + self.latex['tabletype'] + r'}' + align)
         add_dictval_to_list(self.latex, 'preamble', lines)
         if 'caption' in self.latex:
             lines.append(r'\caption{' + self.latex['caption'] + '}')
@@ -182,7 +184,8 @@ class LatexData(core.BaseData):
         add_dictval_to_list(self.latex, 'data_end', lines)
         lines.append(self.data_end)
         add_dictval_to_list(self.latex, 'tablefoot', lines)
-        lines.append(r'\end{' + self.latex['tabletype'] + '}')
+        if self.latex['tabletype'] is not None:
+            lines.append(r'\end{' + self.latex['tabletype'] + '}')
 
 
 class Latex(core.BaseReader):
@@ -222,6 +225,9 @@ class Latex(core.BaseReader):
 
                 ascii.write(data, sys.stdout, Writer = ascii.Latex,
                             latexdict = {'tabletype': 'table*'})
+
+            If ``None``, the table environment will be dropped, keeping only
+            the ``tabular`` environment.
 
         * tablealign : positioning of table in text.
             The default is not to specify a position preference in the text.
@@ -332,6 +338,7 @@ class AASTexHeaderSplitter(LatexSplitter):
 
         \tablehead{\colhead{col1} & ... & \colhead{coln}}
     '''
+
     def __call__(self, lines):
         return super(LatexSplitter, self).__call__(lines)
 

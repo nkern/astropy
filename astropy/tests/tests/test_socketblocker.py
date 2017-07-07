@@ -6,10 +6,11 @@ import time
 
 from threading import Thread
 
-from ..helper import pytest
+import pytest
+
 from ..disable_internet import no_internet
-from astropy.extern.six.moves import BaseHTTPServer, SimpleHTTPServer
-from astropy.extern.six.moves.urllib.request import urlopen
+from ...extern.six.moves import BaseHTTPServer, SimpleHTTPServer
+from ...extern.six.moves.urllib.request import urlopen
 
 
 def test_outgoing_fails():
@@ -18,7 +19,7 @@ def test_outgoing_fails():
             urlopen('http://www.astropy.org')
 
 
-class StoppableHTTPServer(BaseHTTPServer.HTTPServer,object):
+class StoppableHTTPServer(BaseHTTPServer.HTTPServer, object):
     def __init__(self, *args):
         super(StoppableHTTPServer, self).__init__(*args)
         self.stop = False
@@ -55,7 +56,7 @@ def test_localconnect_succeeds(localhost):
     server.start()
     time.sleep(0.1)
 
-    urlopen('http://{localhost:s}:{port:d}'.format(localhost=localhost,port=port)).close()
+    urlopen('http://{localhost:s}:{port:d}'.format(localhost=localhost, port=port)).close()
 
 
 PY3_4 = sys.version_info[:2] >= (3, 4)

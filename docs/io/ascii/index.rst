@@ -20,7 +20,7 @@ The following shows a few of the ASCII formats that are available, while the sec
 * :class:`~astropy.io.ascii.Basic`: basic table with customizable delimiters and header configurations
 * :class:`~astropy.io.ascii.Cds`: `CDS format table <http://vizier.u-strasbg.fr/doc/catstd.htx>`_ (also Vizier and ApJ machine readable tables)
 * :class:`~astropy.io.ascii.Daophot`: table from the IRAF DAOphot package
-* :class:`~astropy.io.ascii.Ecsv`: `Enhanced CSV format <https://github.com/astropy/astropy-APEs/blob/master/APE6.rst>`_
+* :class:`~astropy.io.ascii.Ecsv`: :ref:`ecsv_format` for lossless round-trip of data tables
 * :class:`~astropy.io.ascii.FixedWidth`: table with fixed-width columns (see also :ref:`fixed_width_gallery`)
 * :class:`~astropy.io.ascii.Ipac`: `IPAC format table <http://irsa.ipac.caltech.edu/applications/DDGEN/Doc/ipac_tbl.html>`_
 * :class:`~astropy.io.ascii.HTML`: HTML format table contained in a <table> tag
@@ -34,7 +34,7 @@ be easily accommodated.
 
 .. note::
 
-    It is also possible to use the functionality from
+    It is also possible (and encouraged) to use the functionality from
     :mod:`astropy.io.ascii` through a higher-level interface in the
     :ref:`Data Tables <astropy-table>` package. See :ref:`table_io` for more details.
 
@@ -100,7 +100,9 @@ disable the fast engine::
 
    Reading a table which contains non-ASCII (unicode) characters is only
    supported in Python 3 or greater.  If you have Python 2.x and need
-   this functionality, consider using a newer version of Python.
+   this functionality, consider using a newer version of Python. With Python
+   3 and the pure-Python readers, it is also possible to specify the encoding
+   of the file with the ``encoding`` parameter.
 
 Writing Tables
 --------------
@@ -145,8 +147,7 @@ To disable this engine, use the parameter ``fast_writer``::
 
    >>> ascii.write(data, 'values.csv', format='csv', fast_writer=False)  # doctest: +SKIP
 
-Finally, one can write data in the `ECSV table format
-<https://github.com/astropy/astropy-APEs/blob/master/APE6.rst>`_ which allows
+Finally, one can write data in the :ref:`ecsv_format` which allows
 preserving table meta-data such as column data types and units.  In this way a
 data table (including one with masked entries) can be stored and read back as
 ASCII with no loss of information.

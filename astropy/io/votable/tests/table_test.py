@@ -8,12 +8,12 @@ Test the conversion to/from astropy.table
 import io
 import os
 
+import pytest
 import numpy as np
 
 from ....utils.data import get_pkg_data_filename, get_pkg_data_fileobj
 from ..table import parse, writeto
 from .. import tree
-from ....tests.helper import pytest
 from ....extern.six.moves import zip
 
 try:
@@ -126,6 +126,7 @@ def test_table_read_with_unnamed_tables():
         t = Table.read(fd, format='votable')
 
     assert len(t) == 1
+
 
 @pytest.mark.skipif('not HAS_PATHLIB')
 def test_votable_path_object():

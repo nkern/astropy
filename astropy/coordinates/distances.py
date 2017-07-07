@@ -127,7 +127,7 @@ class Distance(u.SpecificTypeQuantity):
                         unit = u.Mpc
                     elif meanlogval > 3:
                         unit = u.kpc
-                    elif meanlogval < -3: #~200 AU
+                    elif meanlogval < -3:  # ~200 AU
                         unit = u.AU
                     else:
                         unit = u.pc
@@ -183,8 +183,8 @@ class Distance(u.SpecificTypeQuantity):
     @property
     def distmod(self):
         """The distance modulus as a `~astropy.units.Quantity`"""
-        val = 5. * np.log10(self.to(u.pc).value) - 5.
-        return u.Quantity(val, u.mag)
+        val = 5. * np.log10(self.to_value(u.pc)) - 5.
+        return u.Quantity(val, u.mag, copy=False)
 
     @classmethod
     def _distmod_to_pc(cls, dm):

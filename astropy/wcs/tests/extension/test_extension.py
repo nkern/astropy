@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 
-from ....tests.helper import pytest
+import pytest
 
 
 def test_wcsapi_extension(tmpdir):

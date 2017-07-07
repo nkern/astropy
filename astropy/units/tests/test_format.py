@@ -10,11 +10,11 @@ Regression tests for the units.format package
 from __future__ import (absolute_import, unicode_literals, division,
                         print_function)
 
-from ...extern import six
-
+import pytest
 from numpy.testing.utils import assert_allclose
-from ...tests.helper import pytest, catch_warnings
 
+from ...extern import six
+from ...tests.helper import catch_warnings
 from ... import units as u
 from ...constants import si
 from .. import core
@@ -51,6 +51,7 @@ def test_unit_grammar_fail(string):
     with pytest.raises(ValueError):
         print(string)
         u_format.Generic.parse(string)
+
 
 @pytest.mark.parametrize('strings, unit', [
     (["0.1nm"], u.AA),
@@ -254,25 +255,25 @@ def test_new_style_latex():
 
 
 def test_latex_scale():
-    fluxunit = u.Unit(1.e-24 * u.erg / (u.cm **2 * u.s * u.Hz))
+    fluxunit = u.Unit(1.e-24 * u.erg / (u.cm ** 2 * u.s * u.Hz))
     latex = r'$\mathrm{1 \times 10^{-24}\,\frac{erg}{Hz\,s\,cm^{2}}}$'
     assert fluxunit.to_string('latex') == latex
 
 
 def test_latex_inline_scale():
-    fluxunit = u.Unit(1.e-24 * u.erg / (u.cm **2 * u.s * u.Hz))
+    fluxunit = u.Unit(1.e-24 * u.erg / (u.cm ** 2 * u.s * u.Hz))
     latex_inline = (r'$\mathrm{1 \times 10^{-24}\,erg'
                     r'\,Hz^{-1}\,s^{-1}\,cm^{-2}}$')
     assert fluxunit.to_string('latex_inline') == latex_inline
 
 
 @pytest.mark.parametrize('format_spec, string', [
-    ('generic','erg / (cm2 s)'),
+    ('generic', 'erg / (cm2 s)'),
     ('s', 'erg / (cm2 s)'),
     ('console', '  erg  \n ------\n s cm^2'),
     ('latex', '$\\mathrm{\\frac{erg}{s\\,cm^{2}}}$'),
     ('latex_inline', '$\\mathrm{erg\\,s^{-1}\\,cm^{-2}}$'),
-    ('>20s','       erg / (cm2 s)')])
+    ('>20s', '       erg / (cm2 s)')])
 def test_format_styles(format_spec, string):
     fluxunit = u.erg / (u.cm ** 2 * u.s)
     assert format(fluxunit, format_spec) == string
@@ -358,14 +359,7 @@ def test_deprecated_did_you_mean_units():
     try:
         u.Unit('ANGSTROM', format='fits')
     except ValueError as e:
-        assert 'angstrom (deprecated)' in six.text_type(e)
-        assert 'Angstrom (deprecated)' in six.text_type(e)
-        assert '10**-1 nm' in six.text_type(e)
-
-    with catch_warnings() as w:
-        u.Unit('Angstrom', format='fits')
-    assert len(w) == 1
-    assert '10**-1 nm' in six.text_type(w[0].message)
+        assert 'Did you mean Angstrom or angstrom?' in six.text_type(e)
 
     try:
         u.Unit('crab', format='ogip')

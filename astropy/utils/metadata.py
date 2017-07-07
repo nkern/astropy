@@ -21,6 +21,7 @@ __all__ = ['MergeConflictError', 'MergeConflictWarning', 'MERGE_STRATEGIES',
            'common_dtype', 'MergePlus', 'MergeNpConcatenate', 'MergeStrategy',
            'MergeStrategyMeta', 'enable_merge_strategies', 'merge', 'MetaData']
 
+
 class MergeConflictError(TypeError):
     pass
 
@@ -69,6 +70,7 @@ def common_dtype(arrs):
     arr_common = np.array([arr[0] for arr in arrs])
     return arr_common.dtype.str
 
+
 class MergeStrategyMeta(type):
     """
     Metaclass that registers MergeStrategy subclasses into the
@@ -82,6 +84,7 @@ class MergeStrategyMeta(type):
         # MergeConflictError.
         if 'merge' in members and isinstance(members['merge'], classmethod):
             orig_merge = members['merge'].__func__
+
             @wraps(orig_merge)
             def merge(cls, left, right):
                 try:
@@ -159,6 +162,7 @@ class MergeStrategy(object):
     enabled = False
 
     # types = [(left_types, right_types), ...]
+
 
 class MergePlus(MergeStrategy):
     """
@@ -280,7 +284,23 @@ def enable_merge_strategies(*merge_strategies):
     return _EnableMergeStrategies(*merge_strategies)
 
 
-def merge(left, right, merge_func=None, metadata_conflicts='warn'):
+def _warn_str_func(key, left, right):
+    out = ('Cannot merge meta key {0!r} types {1!r}'
+           ' and {2!r}, choosing {0}={3!r}'
+           .format(key, type(left), type(right), right))
+    return out
+
+
+def _error_str_func(key, left, right):
+    out = ('Cannot merge meta key {0!r} '
+           'types {1!r} and {2!r}'
+           .format(key, type(left), type(right)))
+    return out
+
+
+def merge(left, right, merge_func=None, metadata_conflicts='warn',
+          warn_str_func=_warn_str_func,
+          error_str_func=_error_str_func):
     """
     Merge the ``left`` and ``right`` metadata objects.
 
@@ -332,14 +352,10 @@ def merge(left, right, merge_func=None, metadata_conflicts='warn'):
                     out[key] = left[key]
                 elif _not_equal(left[key], right[key]):
                     if metadata_conflicts == 'warn':
-                        warnings.warn('Cannot merge meta key {0!r} types {1!r}'
-                                      ' and {2!r}, choosing {0}={3!r}'
-                                      .format(key, type(left[key]), type(right[key]), right[key]),
+                        warnings.warn(warn_str_func(key, left[key], right[key]),
                                       MergeConflictWarning)
                     elif metadata_conflicts == 'error':
-                        raise MergeConflictError('Cannot merge meta key {0!r} '
-                                                 'types {1!r} and {2!r}'
-                                                 .format(key, type(left[key]), type(right[key])))
+                        raise MergeConflictError(error_str_func(key, left[key], right[key]))
                     elif metadata_conflicts != 'silent':
                         raise ValueError('metadata_conflicts argument must be one '
                                          'of "silent", "warn", or "error"')
@@ -371,6 +387,7 @@ class MetaData(object):
 
         .. versionadded:: 1.2
     """
+
     def __init__(self, doc="", copy=True):
         self.__doc__ = doc
         self.copy = copy

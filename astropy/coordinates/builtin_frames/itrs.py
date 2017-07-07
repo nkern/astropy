@@ -3,8 +3,9 @@
 from __future__ import (absolute_import, unicode_literals, division,
                         print_function)
 
-from ..representation import CartesianRepresentation
-from ..baseframe import BaseCoordinateFrame, TimeFrameAttribute
+from ..representation import CartesianRepresentation, CartesianDifferential
+from ..baseframe import BaseCoordinateFrame
+from ..attributes import TimeAttribute
 from .utils import DEFAULT_OBSTIME
 
 
@@ -18,8 +19,9 @@ class ITRS(BaseCoordinateFrame):
     """
 
     default_representation = CartesianRepresentation
+    default_differential = CartesianDifferential
 
-    obstime = TimeFrameAttribute(default=DEFAULT_OBSTIME)
+    obstime = TimeAttribute(default=DEFAULT_OBSTIME)
 
     @property
     def earth_location(self):

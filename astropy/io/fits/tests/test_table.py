@@ -6,6 +6,7 @@ import copy
 import gc
 import re
 
+import pytest
 import numpy as np
 from numpy import char as chararray
 
@@ -19,7 +20,7 @@ from ....extern import six
 from ....extern.six.moves import range, zip
 from ....extern.six.moves import cPickle as pickle
 from ....io import fits
-from ....tests.helper import pytest, catch_warnings, ignore_warnings
+from ....tests.helper import catch_warnings, ignore_warnings
 from ....utils.exceptions import AstropyDeprecationWarning
 
 from ..column import Delayed, NUMPY2FITS
@@ -365,6 +366,19 @@ class TestTableFunctions(FitsTestCase):
         assert comparerecords(hdu.data, hdul[1].data)
         hdul.close()
 
+    def test_numpy_ndarray_to_bintablehdu_with_unicode(self):
+        desc = np.dtype({'names': ['order', 'name', 'mag', 'Sp'],
+                         'formats': ['int', 'U20', 'float32', 'U10']})
+        a = np.array([(1, u'Serius', -1.45, u'A1V'),
+                      (2, u'Canopys', -0.73, u'F0Ib'),
+                      (3, u'Rigil Kent', -0.1, u'G2V')], dtype=desc)
+        hdu = fits.BinTableHDU(a)
+        assert comparerecords(hdu.data, a.view(fits.FITS_rec))
+        hdu.writeto(self.temp('toto.fits'), overwrite=True)
+        hdul = fits.open(self.temp('toto.fits'))
+        assert comparerecords(hdu.data, hdul[1].data)
+        hdul.close()
+
     def test_new_table_from_recarray(self):
         bright = np.rec.array([(1, 'Serius', -1.45, 'A1V'),
                                (2, 'Canopys', -0.73, 'F0Ib'),
@@ -519,13 +533,13 @@ class TestTableFunctions(FitsTestCase):
 
         hdu.writeto(self.temp('newtable.fits'))
 
-        info = [(0, 'PRIMARY', 'PrimaryHDU', 4, (), '', ''),
-                (1, '', 'BinTableHDU', 19, '8R x 5C', '[10A, J, 10A, 5E, L]',
+        info = [(0, 'PRIMARY', 1, 'PrimaryHDU', 4, (), '', ''),
+                (1, '', 1, 'BinTableHDU', 19, '8R x 5C', '[10A, J, 10A, 5E, L]',
                  '')]
 
         assert fits.info(self.temp('newtable.fits'), output=False) == info
 
-        z = np.array([0.,  0.,  0.,  0.,  0.], dtype=np.float32)
+        z = np.array([0., 0., 0., 0., 0.], dtype=np.float32)
         array = np.rec.array(
             [('NGC1', 312, '', z, True),
              ('NGC2', 334, '', z, False),
@@ -637,7 +651,7 @@ class TestTableFunctions(FitsTestCase):
         assert tbhdu1.columns.names == ['target', 'counts', 'notes',
                                         'spectrum', 'flag']
 
-        z = np.array([0.,  0.,  0.,  0.,  0.], dtype=np.float32)
+        z = np.array([0., 0., 0., 0., 0.], dtype=np.float32)
         array = np.rec.array(
             [('NGC1', 312, '', z, True),
              ('NGC2', 334, '', z, False),
@@ -678,7 +692,7 @@ class TestTableFunctions(FitsTestCase):
 
         hdu = fits.BinTableHDU.from_columns(t1[1].columns + t2[1].columns)
 
-        z = np.array([0.,  0.,  0.,  0.,  0.], dtype=np.float32)
+        z = np.array([0., 0., 0., 0., 0.], dtype=np.float32)
         array = np.rec.array(
             [('NGC1', 312, '', z, True, 'NGC5', 412, '', z, False),
              ('NGC2', 334, '', z, False, 'NGC6', 434, '', z, True),
@@ -726,8 +740,8 @@ class TestTableFunctions(FitsTestCase):
         assert hdu.columns.columns[1].array[0] == 80
         assert hdu.data[0][1] == 80
 
-        info = [(0, 'PRIMARY', 'PrimaryHDU', 4, (), '', ''),
-                (1, '', 'BinTableHDU', 30, '4R x 10C',
+        info = [(0, 'PRIMARY', 1, 'PrimaryHDU', 4, (), '', ''),
+                (1, '', 1, 'BinTableHDU', 30, '4R x 10C',
                  '[10A, J, 10A, 5E, L, 10A, J, 10A, 5E, L]', '')]
 
         assert fits.info(self.temp('newtable.fits'), output=False) == info
@@ -739,7 +753,7 @@ class TestTableFunctions(FitsTestCase):
                 ['target', 'counts', 'notes', 'spectrum', 'flag', 'target1',
                  'counts1', 'notes1', 'spectrum1', 'flag1'])
 
-        z = np.array([0.,  0.,  0.,  0.,  0.], dtype=np.float32)
+        z = np.array([0., 0., 0., 0., 0.], dtype=np.float32)
         array = np.rec.array(
             [('NGC1', 312, '', z, True, 'NGC5', 412, '', z, False),
              ('NGC2', 334, '', z, False, 'NGC6', 434, '', z, True),
@@ -854,7 +868,7 @@ class TestTableFunctions(FitsTestCase):
         a, b, c = row[1:4]
         assert a == counts[2]
         assert b == ''
-        assert (c == np.array([0., 0.,  0.,  0., 0.], dtype=np.float32)).all()
+        assert (c == np.array([0., 0., 0., 0., 0.], dtype=np.float32)).all()
         row['counts'] = 310
         assert row['counts'] == 310
 
@@ -1058,7 +1072,7 @@ class TestTableFunctions(FitsTestCase):
         assert tbhdu2.columns.columns[2].array[8] == ''
         assert (tbhdu2.columns.columns[3].array[8] ==
                 np.array([0., 0., 0., 0., 0.], dtype=np.float32)).all()
-        assert tbhdu2.columns.columns[4].array[8] == False  #nopep8
+        assert tbhdu2.columns.columns[4].array[8] == False  # nopep8
 
     def test_verify_data_references(self):
         counts = np.array([312, 334, 308, 317])
@@ -1884,7 +1898,7 @@ class TestTableFunctions(FitsTestCase):
         """Regression test for https://github.com/astropy/astropy/pull/3580"""
 
         hdulist = fits.open(self.data('tdim.fits'))
-        assert hdulist[1].data['V_mag'].shape == (3,1,1)
+        assert hdulist[1].data['V_mag'].shape == (3, 1, 1)
 
     def test_slicing(self):
         """Regression test for https://aeon.stsci.edu/ssb/trac/pyfits/ticket/52"""
@@ -2491,11 +2505,10 @@ class TestTableFunctions(FitsTestCase):
             tbhdu.dump(datafile, cdfile, hfile, overwrite=True)
             with catch_warnings(AstropyDeprecationWarning) as warning_lines:
                 tbhdu.dump(datafile, cdfile, hfile, clobber=True)
-                assert len(warning_lines) == 0
-                # assert warning_lines[0].category == AstropyDeprecationWarning
-                # assert (str(warning_lines[0].message) == '"clobber" was '
-                #         'deprecated in version 1.3 and will be removed in a '
-                #         'future version. Use argument "overwrite" instead.')
+                assert warning_lines[0].category == AstropyDeprecationWarning
+                assert (str(warning_lines[0].message) == '"clobber" was '
+                        'deprecated in version 2.0 and will be removed in a '
+                        'future version. Use argument "overwrite" instead.')
 
 
 @contextlib.contextmanager
@@ -2513,7 +2526,6 @@ def _refcounting(type_):
     gc.collect()
     assert len(objgraph.by_type(type_)) <= refcount, \
             "More {0!r} objects still in memory than before."
-
 
 
 class TestVLATables(FitsTestCase):
@@ -2968,3 +2980,28 @@ def test_regression_5383():
     hdu = fits.BinTableHDU.from_columns([col])
     del hdu._header['TTYPE1']
     hdu.columns[0].name = 'b'
+
+
+def test_table_to_hdu():
+    from ....table import Table
+    table = Table([[1, 2, 3], ['a', 'b', 'c'], [2.3, 4.5, 6.7]],
+                    names=['a', 'b', 'c'], dtype=['i', 'U1', 'f'])
+    table['a'].unit = 'm/s'
+    table['b'].unit = 'not-a-unit'
+    table.meta['foo'] = 'bar'
+
+    with catch_warnings() as w:
+        hdu = fits.BinTableHDU(table, header=fits.Header({'TEST': 1}))
+        assert len(w) == 1
+        assert str(w[0].message).startswith("'not-a-unit' did not parse as"
+                                            " fits unit")
+
+    for name in 'abc':
+        assert np.array_equal(table[name], hdu.data[name])
+
+    # Check that TUNITn cards appear in the correct order
+    # (https://github.com/astropy/astropy/pull/5720)
+    assert hdu.header.index('TUNIT1') < hdu.header.index('TTYPE2')
+
+    assert hdu.header['FOO'] == 'bar'
+    assert hdu.header['TEST'] == 1

@@ -4,10 +4,11 @@ from __future__ import (absolute_import, division, print_function,
 
 from io import StringIO
 
+import pytest
 import numpy as np
 
 from .. import core, funcs
-from ...tests.helper import pytest, quantity_allclose as allclose
+from ...tests.helper import quantity_allclose as allclose
 from ... import units as u
 
 try:
@@ -31,16 +32,16 @@ def test_init():
         h0bad = u.Quantity([70, 100], u.km / u.s / u.Mpc)
         cosmo = core.FlatLambdaCDM(H0=h0bad, Om0=0.27)
     with pytest.raises(ValueError):
-        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, m_nu=0.5)
+        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, Tcmb0=3, m_nu=0.5)
     with pytest.raises(ValueError):
         bad_mnu = u.Quantity([-0.3, 0.2, 0.1], u.eV)
-        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, m_nu=bad_mnu)
+        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, Tcmb0=3, m_nu=bad_mnu)
     with pytest.raises(ValueError):
         bad_mnu = u.Quantity([0.15, 0.2, 0.1], u.eV)
-        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, Neff=2, m_nu=bad_mnu)
+        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, Tcmb0=3, Neff=2, m_nu=bad_mnu)
     with pytest.raises(ValueError):
         bad_mnu = u.Quantity([-0.3, 0.2], u.eV)  # 2, expecting 3
-        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, m_nu=bad_mnu)
+        cosmo = core.FlatLambdaCDM(H0=70, Om0=0.2, Tcmb0=3, m_nu=bad_mnu)
     with pytest.raises(ValueError):
         cosmo = core.FlatLambdaCDM(H0=70, Om0=0.27, Ob0=-0.04)
     with pytest.raises(ValueError):
@@ -53,6 +54,7 @@ def test_init():
         cosmo.Odm(1)
     with pytest.raises(TypeError):
         core.default_cosmology.validate(4)
+
 
 def test_basic():
     cosmo = core.FlatLambdaCDM(H0=70, Om0=0.27, Tcmb0=2.0, Neff=3.04,
@@ -297,7 +299,7 @@ def test_clone():
 
 def test_xtfuncs():
     """ Test of absorption and lookback integrand"""
-    cosmo = core.LambdaCDM(70, 0.3, 0.5)
+    cosmo = core.LambdaCDM(70, 0.3, 0.5, Tcmb0=2.725)
     z = np.array([2.0, 3.2])
     assert allclose(cosmo.lookback_time_integrand(3), 0.052218976654969378,
                     rtol=1e-4)
@@ -311,24 +313,24 @@ def test_xtfuncs():
 
 def test_repr():
     """ Test string representation of built in classes"""
-    cosmo = core.LambdaCDM(70, 0.3, 0.5)
+    cosmo = core.LambdaCDM(70, 0.3, 0.5, Tcmb0=2.725)
     expected = 'LambdaCDM(H0=70 km / (Mpc s), Om0=0.3, '\
                'Ode0=0.5, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV, '\
                'Ob0=None)'
     assert str(cosmo) == expected
 
-    cosmo = core.LambdaCDM(70, 0.3, 0.5, m_nu=u.Quantity(0.01, u.eV))
+    cosmo = core.LambdaCDM(70, 0.3, 0.5, Tcmb0=2.725, m_nu=u.Quantity(0.01, u.eV))
     expected = 'LambdaCDM(H0=70 km / (Mpc s), Om0=0.3, Ode0=0.5, '\
                'Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.01  0.01  0.01] eV, '\
                'Ob0=None)'
     assert str(cosmo) == expected
 
-    cosmo = core.FlatLambdaCDM(50.0, 0.27, Ob0=0.05)
+    cosmo = core.FlatLambdaCDM(50.0, 0.27, Tcmb0=3, Ob0=0.05)
     expected = 'FlatLambdaCDM(H0=50 km / (Mpc s), Om0=0.27, '\
-               'Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV, Ob0=0.05)'
+               'Tcmb0=3 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV, Ob0=0.05)'
     assert str(cosmo) == expected
 
-    cosmo = core.wCDM(60.0, 0.27, 0.6, w0=-0.8, name='test1')
+    cosmo = core.wCDM(60.0, 0.27, 0.6, Tcmb0=2.725, w0=-0.8, name='test1')
     expected = 'wCDM(name="test1", H0=60 km / (Mpc s), Om0=0.27, '\
                'Ode0=0.6, w0=-0.8, Tcmb0=2.725 K, Neff=3.04, '\
                'm_nu=[ 0.  0.  0.] eV, Ob0=None)'
@@ -336,11 +338,10 @@ def test_repr():
 
     cosmo = core.FlatwCDM(65.0, 0.27, w0=-0.6, name='test2')
     expected = 'FlatwCDM(name="test2", H0=65 km / (Mpc s), Om0=0.27, '\
-               'w0=-0.6, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV, '\
-               'Ob0=None)'
+               'w0=-0.6, Tcmb0=0 K, Neff=3.04, m_nu=None, Ob0=None)'
     assert str(cosmo) == expected
 
-    cosmo = core.w0waCDM(60.0, 0.25, 0.4, w0=-0.6, wa=0.1, name='test3')
+    cosmo = core.w0waCDM(60.0, 0.25, 0.4, w0=-0.6, Tcmb0=2.725, wa=0.1, name='test3')
     expected = 'w0waCDM(name="test3", H0=60 km / (Mpc s), Om0=0.25, '\
                'Ode0=0.4, w0=-0.6, wa=0.1, Tcmb0=2.725 K, Neff=3.04, '\
                'm_nu=[ 0.  0.  0.] eV, Ob0=None)'
@@ -349,18 +350,18 @@ def test_repr():
     cosmo = core.Flatw0waCDM(55.0, 0.35, w0=-0.9, wa=-0.2, name='test4',
                              Ob0=0.0456789)
     expected = 'Flatw0waCDM(name="test4", H0=55 km / (Mpc s), Om0=0.35, '\
-               'w0=-0.9, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV, '\
+               'w0=-0.9, Tcmb0=0 K, Neff=3.04, m_nu=None, '\
                'Ob0=0.0457)'
     assert str(cosmo) == expected
 
     cosmo = core.wpwaCDM(50.0, 0.3, 0.3, wp=-0.9, wa=-0.2,
                          zp=0.3, name='test5')
     expected = 'wpwaCDM(name="test5", H0=50 km / (Mpc s), Om0=0.3, '\
-               'Ode0=0.3, wp=-0.9, wa=-0.2, zp=0.3, Tcmb0=2.725 K, '\
-               'Neff=3.04, m_nu=[ 0.  0.  0.] eV, Ob0=None)'
+               'Ode0=0.3, wp=-0.9, wa=-0.2, zp=0.3, Tcmb0=0 K, '\
+               'Neff=3.04, m_nu=None, Ob0=None)'
     assert str(cosmo) == expected
 
-    cosmo = core.w0wzCDM(55.0, 0.4, 0.8, w0=-1.05, wz=-0.2,
+    cosmo = core.w0wzCDM(55.0, 0.4, 0.8, w0=-1.05, wz=-0.2, Tcmb0=2.725,
                          m_nu=u.Quantity([0.001, 0.01, 0.015], u.eV))
     expected = 'w0wzCDM(H0=55 km / (Mpc s), Om0=0.4, Ode0=0.8, w0=-1.05, '\
                'wz=-0.2 Tcmb0=2.725 K, Neff=3.04, '\
@@ -426,10 +427,12 @@ class test_cos_sub(core.FLRW):
         return self._w0 * np.ones_like(z)
 
 # Similar, but with neutrinos
+
+
 class test_cos_subnu(core.FLRW):
     def __init__(self):
         core.FLRW.__init__(self, 70.0, 0.27, 0.73, Tcmb0=3.0,
-                           m_nu = 0.1 * u.eV, name="test_cos_nu")
+                           m_nu=0.1 * u.eV, name="test_cos_nu")
         self._w0 = -0.8
 
     def w(self, z):
@@ -460,7 +463,6 @@ def test_de_subclass():
                     [1.12934694, 1.23114444], rtol=1e-4)
 
     # Add neutrinos for efunc, inv_efunc
-
 
 
 @pytest.mark.skipif('not HAS_SCIPY')
@@ -515,11 +517,11 @@ def test_matter():
     assert allclose(tcos.Om(0), 0.3)
     assert allclose(tcos.Ob(0), 0.045)
     z = np.array([0.0, 0.5, 1.0, 2.0])
-    assert allclose(tcos.Om(z), [0.3, 0.59112134, 0.77387435, 0.91974179],
+    assert allclose(tcos.Om(z), [0.3, 0.59124088, 0.77419355, 0.92045455],
                     rtol=1e-4)
     assert allclose(tcos.Ob(z),
-                    [0.045, 0.08866820, 0.11608115, 0.13796127], rtol=1e-4)
-    assert allclose(tcos.Odm(z), [0.255, 0.50245314, 0.6577932, 0.78178052],
+                    [0.045, 0.08868613, 0.11612903, 0.13806818], rtol=1e-4)
+    assert allclose(tcos.Odm(z), [0.255, 0.50255474, 0.65806452, 0.78238636],
                     rtol=1e-4)
     # Consistency of dark and baryonic matter evolution with all
     # non-relativistic matter
@@ -1046,7 +1048,7 @@ def test_age():
 
     # And massive neutrinos
     tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=3.0,
-                              m_nu = 0.1 * u.eV)
+                              m_nu=0.1 * u.eV)
     assert allclose(tcos.age(4), 1.5546485439853412 * u.Gyr)
     assert allclose(tcos.age([1, 5]), [5.88448152, 1.18383759] * u.Gyr)
 
@@ -1080,19 +1082,19 @@ def test_critical_density():
     #  units by default; see the comment at the top of core.py
     tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=0.0)
     assert allclose(tcos.critical_density0,
-                    9.31000324385361e-30 * u.g / u.cm**3)
+                    9.309668456020899e-30 * u.g / u.cm**3)
     assert allclose(tcos.critical_density0,
                     tcos.critical_density(0))
     assert allclose(tcos.critical_density([1, 5]),
-                    [2.70362491e-29, 5.53758986e-28] * u.g / u.cm**3)
+                    [2.70352772e-29, 5.53739080e-28] * u.g / u.cm**3)
     assert allclose(tcos.critical_density([1., 5.]),
-                    [2.70362491e-29, 5.53758986e-28] * u.g / u.cm**3)
+                    [2.70352772e-29, 5.53739080e-28] * u.g / u.cm**3)
 
 
 @pytest.mark.skipif('not HAS_SCIPY')
 def test_comoving_distance_z1z2():
     tcos = core.LambdaCDM(100, 0.3, 0.8, Tcmb0=0.0)
-    with pytest.raises(ValueError): # test diff size z1, z2 fail
+    with pytest.raises(ValueError):  # test diff size z1, z2 fail
         tcos._comoving_distance_z1z2((1, 2), (3, 4, 5))
     # Comoving distances are invertible
     assert allclose(tcos._comoving_distance_z1z2(1, 2),
@@ -1113,7 +1115,7 @@ def test_comoving_distance_z1z2():
 @pytest.mark.skipif('not HAS_SCIPY')
 def test_comoving_transverse_distance_z1z2():
     tcos = core.FlatLambdaCDM(100, 0.3, Tcmb0=0.0)
-    with pytest.raises(ValueError): # test diff size z1, z2 fail
+    with pytest.raises(ValueError):  # test diff size z1, z2 fail
         tcos._comoving_transverse_distance_z1z2((1, 2), (3, 4, 5))
     # Tests that should actually work, target values computed with
     # http://www.astro.multivax.de:8000/phillip/angsiz_prog/README.HTML
@@ -1211,7 +1213,7 @@ def test_absorption_distance():
 def test_massivenu_basic():
     # Test no neutrinos case
     tcos = core.FlatLambdaCDM(70.4, 0.272, Neff=4.05,
-                              m_nu=u.Quantity(0, u.eV))
+                              Tcmb0=2.725 * u.K, m_nu=u.Quantity(0, u.eV))
     assert allclose(tcos.Neff, 4.05)
     assert not tcos.has_massive_nu
     mnu = tcos.m_nu
@@ -1224,13 +1226,13 @@ def test_massivenu_basic():
                     rtol=1e-6)
 
     # Alternative no neutrinos case
-    tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0 = 0 * u.K,
+    tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=0 * u.K,
                               m_nu=u.Quantity(0.4, u.eV))
     assert not tcos.has_massive_nu
     assert tcos.m_nu is None
 
     # Test basic setting, retrieval of values
-    tcos = core.FlatLambdaCDM(70.4, 0.272,
+    tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=2.725 * u.K,
                               m_nu=u.Quantity([0.0, 0.01, 0.02], u.eV))
     assert tcos.has_massive_nu
     mnu = tcos.m_nu
@@ -1239,8 +1241,8 @@ def test_massivenu_basic():
     assert allclose(mnu, [0.0, 0.01, 0.02] * u.eV)
 
     # All massive neutrinos case
-    tcos = core.FlatLambdaCDM(70.4, 0.272, m_nu=u.Quantity(0.1, u.eV),
-                              Neff=3.1)
+    tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=2.725,
+                              m_nu=u.Quantity(0.1, u.eV), Neff=3.1)
     assert allclose(tcos.Neff, 3.1)
     assert tcos.has_massive_nu
     mnu = tcos.m_nu
@@ -1273,7 +1275,7 @@ def test_distances():
     cos = core.LambdaCDM(75.0, 0.3, 0.4, Tcmb0=3.0, Neff=3,
                          m_nu=u.Quantity(10.0, u.eV))
     assert allclose(cos.comoving_distance(z),
-                    [2471.80626824, 3567.1902565 , 4207.15995626,
+                    [2471.80626824, 3567.1902565, 4207.15995626,
                      4638.20476018] * u.Mpc, rtol=1e-4)
     # Flat
     cos = core.FlatLambdaCDM(75.0, 0.25, Tcmb0=0.0)
@@ -1293,7 +1295,7 @@ def test_distances():
     # Add w
     cos = core.FlatwCDM(75.0, 0.25, w0=-1.05, Tcmb0=0.0)
     assert allclose(cos.comoving_distance(z),
-                    [3216.8296894 , 5117.2097601 , 6317.05995437,
+                    [3216.8296894, 5117.2097601, 6317.05995437,
                      7149.68648536] * u.Mpc, rtol=1e-4)
     cos = core.FlatwCDM(75.0, 0.25, w0=-0.95, Tcmb0=3.0, Neff=3,
                     m_nu=u.Quantity(0.0, u.eV))
@@ -1308,7 +1310,7 @@ def test_distances():
     # Non-flat w
     cos = core.wCDM(75.0, 0.25, 0.4, w0=-0.9, Tcmb0=0.0)
     assert allclose(cos.comoving_distance(z),
-                    [2849.6163356 , 4428.71661565, 5450.97862778,
+                    [2849.6163356, 4428.71661565, 5450.97862778,
                      6179.37072324] * u.Mpc, rtol=1e-4)
     cos = core.wCDM(75.0, 0.25, 0.4, w0=-1.1, Tcmb0=3.0, Neff=3,
                     m_nu=u.Quantity(0.0, u.eV))
@@ -1374,7 +1376,7 @@ def test_distances():
     cos = core.w0wzCDM(75.0, 0.25, 0.5, w0=-0.9, wz=0.1,
                        Tcmb0=3.0, Neff=3, m_nu=u.Quantity(0.0, u.eV))
     assert allclose(cos.comoving_distance(z),
-                    [2997.8115653 , 4686.45599916, 5764.54388557,
+                    [2997.8115653, 4686.45599916, 5764.54388557,
                      6524.17408738] * u.Mpc, rtol=1e-4)
     cos = core.w0wzCDM(75.0, 0.25, 0.5, w0=-0.9, wz=0.1, Tcmb0=3.0,
                        Neff=4, m_nu=u.Quantity(5.0, u.eV))
@@ -1398,7 +1400,7 @@ def test_distances():
     cos = core.FlatLambdaCDM(75.0, 0.25, Tcmb0=3.0,
                              m_nu=u.Quantity([4.0, 5, 9], u.eV))
     assert allclose(cos.comoving_distance(z),
-                    [2563.5093049 , 3776.63362071, 4506.83448243,
+                    [2563.5093049, 3776.63362071, 4506.83448243,
                      5006.50158829] * u.Mpc, rtol=1e-4)
     cos = core.FlatLambdaCDM(75.0, 0.25, Tcmb0=3.0, Neff=4.2,
                              m_nu=u.Quantity([1.0, 4.0, 5, 9], u.eV))

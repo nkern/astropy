@@ -42,7 +42,7 @@ __all__ = [
     'get_pkg_data_filenames', 'compute_hash', 'clear_download_cache',
     'CacheMissingWarning', 'get_free_space_in_dir',
     'check_free_space_in_dir', 'download_file',
-    'download_files_in_parallel', 'is_url_in_cache']
+    'download_files_in_parallel', 'is_url_in_cache', 'get_cached_urls']
 
 
 class Conf(_config.ConfigNamespace):
@@ -52,9 +52,12 @@ class Conf(_config.ConfigNamespace):
 
     dataurl = _config.ConfigItem(
         'http://data.astropy.org/',
-        'URL for astropy remote data site.')
+        'Primary URL for astropy remote data site.')
+    dataurl_mirror = _config.ConfigItem(
+        'http://astropy.org/astropy-data/',
+        'Mirror URL for astropy remote data site.')
     remote_timeout = _config.ConfigItem(
-        3.,
+        10.,
         'Time to wait for remote data queries (in seconds).',
         aliases=['astropy.coordinates.name_resolve.name_resolve_timeout'])
     compute_hash_block_size = _config.ConfigItem(
@@ -71,6 +74,8 @@ class Conf(_config.ConfigNamespace):
         True,
         'If True, temporary download files created when the cache is '
         'inaccessible will be deleted at the end of the python session.')
+
+
 conf = Conf()
 
 
@@ -261,7 +266,7 @@ def get_readable_fileobj(name_or_obj, encoding=None, cache=False,
         try:
             # for Python < 3.3 try backports.lzma; pyliblzma installs as lzma,
             # but does not support TextIOWrapper
-            if sys.version_info >= (3,3,0):
+            if sys.version_info >= (3, 3, 0):
                 import lzma
                 fileobj_new = lzma.LZMAFile(fileobj, mode='rb')
             else:
@@ -484,8 +489,16 @@ def get_pkg_data_fileobj(data_name, package=None, encoding=None, cache=True):
     elif os.path.isfile(datafn):  # local file
         return get_readable_fileobj(datafn, encoding=encoding)
     else:  # remote file
-        return get_readable_fileobj(conf.dataurl + datafn, encoding=encoding,
-                                    cache=cache)
+        all_urls = (conf.dataurl, conf.dataurl_mirror)
+        for url in all_urls:
+            try:
+                return get_readable_fileobj(url + datafn, encoding=encoding,
+                                            cache=cache)
+            except urllib.error.URLError as e:
+                pass
+        urls = '\n'.join('  - {0}'.format(url) for url in all_urls)
+        raise urllib.error.URLError("Failed to download {0} from the following "
+                                    "repositories:\n\n{1}".format(datafn, urls))
 
 
 def get_pkg_data_filename(data_name, package=None, show_progress=True,
@@ -582,11 +595,20 @@ def get_pkg_data_filename(data_name, package=None, show_progress=True,
     if data_name.startswith('hash/'):
         # first try looking for a local version if a hash is specified
         hashfn = _find_hash_fn(data_name[5:])
+
         if hashfn is None:
-            return download_file(
-                conf.dataurl + data_name, cache=True,
-                show_progress=show_progress,
-                timeout=remote_timeout)
+            all_urls = (conf.dataurl, conf.dataurl_mirror)
+            for url in all_urls:
+                try:
+                    return download_file(url + data_name, cache=True,
+                                         show_progress=show_progress,
+                                         timeout=remote_timeout)
+                except urllib.error.URLError:
+                    pass
+            urls = '\n'.join('  - {0}'.format(url) for url in all_urls)
+            raise urllib.error.URLError("Failed to download {0} from the following "
+                                        "repositories:\n\n{1}\n\n".format(data_name, urls))
+
         else:
             return hashfn
     else:
@@ -597,10 +619,17 @@ def get_pkg_data_filename(data_name, package=None, show_progress=True,
         elif os.path.isfile(datafn):  # local file
             return datafn
         else:  # remote file
-            return download_file(
-                conf.dataurl + data_name, cache=True,
-                show_progress=show_progress,
-                timeout=remote_timeout)
+            all_urls = (conf.dataurl, conf.dataurl_mirror)
+            for url in all_urls:
+                try:
+                    return download_file(url + data_name, cache=True,
+                                         show_progress=show_progress,
+                                         timeout=remote_timeout)
+                except urllib.error.URLError:
+                    pass
+            urls = '\n'.join('  - {0}'.format(url) for url in all_urls)
+            raise urllib.error.URLError("Failed to download {0} from the following "
+                                        "repositories:\n\n{1}".format(data_name, urls))
 
 
 def get_pkg_data_contents(data_name, package=None, encoding=None, cache=True):
@@ -874,9 +903,9 @@ def _find_pkg_data_path(data_name, package=None):
     path = os.path.join(module_path, data_name)
 
     root_dir = os.path.dirname(rootpkg.__file__)
-    assert _is_inside(path, root_dir), \
-           ("attempted to get a local data file outside "
-            "of the " + rootpkgname + " tree")
+    if not _is_inside(path, root_dir):
+        raise RuntimeError("attempted to get a local data file outside "
+                           "of the {} tree.".format(rootpkgname))
 
     return path
 
@@ -1028,7 +1057,7 @@ def download_file(remote_url, cache=False, show_progress=True, timeout=None):
 
         with contextlib.closing(urllib.request.urlopen(
                 remote_url, timeout=timeout)) as remote:
-            #keep a hash to rename the local file to the hashed name
+            # keep a hash to rename the local file to the hashed name
             hash = hashlib.md5()
 
             info = remote.info()
@@ -1103,6 +1132,7 @@ def download_file(remote_url, cache=False, show_progress=True, timeout=None):
         raise urllib.error.URLError(e)
 
     return local_path
+
 
 def is_url_in_cache(url_key):
     """
@@ -1243,9 +1273,9 @@ def clear_download_cache(hashorurl=None):
         else:
             with _open_shelve(urlmapfn, True) as url2hash:
                 filepath = os.path.join(dldir, hashorurl)
-                assert _is_inside(filepath, dldir), \
-                       ("attempted to use clear_download_cache on a path "
-                        "outside the data cache directory")
+                if not _is_inside(filepath, dldir):
+                    raise RuntimeError("attempted to use clear_download_cache on"
+                                       " a path outside the data cache directory")
 
                 # shelve DBs don't accept unicode strings as keys in Python 2
                 if six.PY2 and isinstance(hashorurl, six.text_type):
@@ -1331,8 +1361,8 @@ def _open_shelve(shelffn, withclosing=False):
         return shelf
 
 
-#the cache directory must be locked before any writes are performed.  Same for
-#the hash shelve, so this should be used for both.
+# the cache directory must be locked before any writes are performed.  Same for
+# the hash shelve, so this should be used for both.
 def _acquire_download_cache_lock():
     """
     Uses the lock directory method.  This is good because `mkdir` is
@@ -1343,7 +1373,7 @@ def _acquire_download_cache_lock():
     for i in range(conf.download_cache_lock_attempts):
         try:
             os.mkdir(lockdir)
-            #write the pid of this process for informational purposes
+            # write the pid of this process for informational purposes
             with open(os.path.join(lockdir, 'pid'), 'w') as f:
                 f.write(str(os.getpid()))
 
@@ -1361,7 +1391,7 @@ def _release_download_cache_lock():
     lockdir = os.path.join(_get_download_cache_locs()[0], 'lock')
 
     if os.path.isdir(lockdir):
-        #if the pid file is present, be sure to remove it
+        # if the pid file is present, be sure to remove it
         pidfn = os.path.join(lockdir, 'pid')
         if os.path.exists(pidfn):
             os.remove(pidfn)
@@ -1370,3 +1400,26 @@ def _release_download_cache_lock():
         msg = 'Error releasing lock. "{0}" either does not exist or is not ' +\
               'a directory.'
         raise RuntimeError(msg.format(lockdir))
+
+
+def get_cached_urls():
+    """
+    Get the list of URLs in the cache. Especially useful for looking up what
+    files are stored in your cache when you don't have internet access.
+
+    Returns
+    -------
+    cached_urls : list
+        List of cached URLs.
+    """
+    # The code below is modified from astropy.utils.data.download_file()
+    try:
+        dldir, urlmapfn = _get_download_cache_locs()
+    except (IOError, OSError) as e:
+        msg = 'Remote data cache could not be accessed due to '
+        estr = '' if len(e.args) < 1 else (': ' + str(e))
+        warn(CacheMissingWarning(msg + e.__class__.__name__ + estr))
+        return False
+
+    with _open_shelve(urlmapfn, True) as url2hash:
+        return list(url2hash.keys())

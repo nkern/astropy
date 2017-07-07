@@ -1,9 +1,9 @@
 .. doctest-skip-all
 .. _code-guide:
 
-=================
+*****************
 Coding Guidelines
-=================
+*****************
 
 This section describes requirements and guidelines that should be followed
 both for the core package and for affiliated packages.
@@ -13,11 +13,11 @@ both for the core package and for affiliated packages.
           followed.
 
 Interface and Dependencies
---------------------------
+==========================
 
-* All code must be compatible with Python 2.6, 2.7, as well as 3.3 and
+* All code must be compatible with Python 2.7, as well as 3.3 and
   later.  The use of `six`_ for writing code that is portable between Python
-  2.x and 3.x is encouraged going forward.  However, much of our affiliate code
+  2.x and 3.x is encouraged going forward.  However, our affiliate code
   may still use `2to3`_ to process Python 2.x files to be compatible with
   Python 3.x.
 
@@ -46,16 +46,12 @@ Interface and Dependencies
   :ref:`dev-portable`.
 
 * The new Python 3 formatting style should be used (i.e.
-  ``"{0:s}".format("spam")`` instead of ``"%s" % "spam"``), although
-  when using positional arguments, the position should always be
-  specified (i.e.  ``"{:s}"`` is not compatible with Python
-  2.6).
+  ``"{0:s}".format("spam")`` instead of ``"%s" % "spam"``).
 
-* The core package and affiliated packages should be importable with
-  no dependencies other than components already in the Astropy core,
-  the `Python Standard Library
-  <http://docs.python.org/release/2.6/library/index.html>`_, and
-  NumPy_ |minimum_numpy_version| or later.
+* The core package and affiliated packages should be importable with no
+  dependencies other than components already in the Astropy core, the
+  `Python Standard Library <https://docs.python.org/library/index.html>`_,
+  and NumPy_ |minimum_numpy_version| or later.
 
 * The package should be importable from the source tree at build time. This
   means that, for example, if the package relies on C extensions that have
@@ -96,7 +92,7 @@ Interface and Dependencies
 
 
 Documentation and Testing
--------------------------
+=========================
 
 * Docstrings must be present for all public classes/methods/functions, and
   must follow the form outlined in the :doc:`docguide` document.
@@ -113,7 +109,7 @@ Documentation and Testing
 
 
 Data and Configuration
-----------------------
+======================
 
 * Packages can include data in a directory named ``data`` inside a subpackage
   source directory as long as it is less than about 100 kb. These data should
@@ -134,7 +130,7 @@ Data and Configuration
   changes.
 
 Standard output, warnings, and errors
--------------------------------------
+=====================================
 
 The built-in ``print(...)`` function should only be used for output that
 is explicitly requested by the user, for example ``print_header(...)``
@@ -163,7 +159,7 @@ be imported using::
     from astropy import log
 
 Coding Style/Conventions
-------------------------
+========================
 
 * The code will follow the standard `PEP8 Style Guide for Python Code
   <http://www.python.org/dev/peps/pep-0008/>`_. In particular, this includes
@@ -243,7 +239,7 @@ Coding Style/Conventions
 .. _handling-unicode:
 
 Unicode guidelines
-------------------
+==================
 
 For maximum compatibility, we need to assume that writing non-ascii
 characters to the console or to files will not work.  However, for
@@ -331,7 +327,7 @@ example test will test that our example class above is compliant::
         assert_follows_unicode_guidelines(FloatList(b'5|4|3|2'), roundtrip=True)
 
 Including C Code
-----------------
+================
 
 * C extensions are only allowed when they provide a significant performance
   enhancement over pure python, or a robust C library already exists to
@@ -361,7 +357,7 @@ Including C Code
 .. _dev-portable:
 
 Writing portable code for Python 2 and 3
-----------------------------------------
+========================================
 
 As of astropy 0.3, the `six`_ library is included to allow supporting Python
 2 and 3 from a single code base.  The use of the `2to3`_ tool has been
@@ -378,7 +374,7 @@ This section is mainly about moving existing code that works with
 3 compatibility.
 
 Welcome to the ``__future__``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 The top of every ``.py`` file should include the following::
 
@@ -399,7 +395,7 @@ from the top-level: only import the copy of `six`_ included with
 astropy.
 
 Finding places to use six
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 Unfortunately, the only way to be certain that code works on both
 Python 2 and 3 is to make sure it is covered by unit tests.
@@ -432,7 +428,7 @@ The `six <http://pythonhosted.org/six/>`__ documentation serves as a
 good reference for the sorts of things that need to be updated.
 
 Not so fast on that Unicode thing
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------------
 
 By importing ``unicode_literals`` from ``__future__``, many things
 that were once byte strings on Python 2 will now by unicode strings.
@@ -449,14 +445,14 @@ example::
    x = np.array([1.0, 2.0, 3.0], dtype=[(str('name'), '>f8')])
 
 The same is true of structure specifiers in the built-in `struct`
-module on Python 2.6.
+module on Python 2.7.
 
 ``pytest.mark.skipif`` also requires a "native" string, i.e.::
 
     @pytest.mark.skipif(str('CONDITIONAL'))
 
 Iteration
-^^^^^^^^^
+---------
 
 The behavior of the methods for iterating over the items, values and
 keys of a dictionary has changed in Python 3.  Additionally, other
@@ -487,7 +483,7 @@ Note that for keys only, ``list(d)`` is an acceptable shortcut to
 ``list(six.iterkeys(d))``.
 
 Issues with ``\u`` escapes
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
 When ``from __future__ import unicode_literals`` is used, all string
 literals (not preceded with a ``'b'``) will become unicode literals.
@@ -532,7 +528,7 @@ of that and still support Python 2::
     '\\u'
 
 Compatibility between versions of Numpy
----------------------------------------
+=======================================
 
 In general, code should aim to be compatible with the lowest supported version
 of NumPy_.  Sometimes, however, it is inefficient to code repeatedly around
@@ -541,7 +537,7 @@ bugs in earlier versions. For those cases, code can be added to
 <numpy-compatibility>` for details.
 
 Requirements Specific to Affiliated Packages
---------------------------------------------
+============================================
 
 * Affiliated packages implementing many classes/functions not relevant to
   the affiliated package itself (for example leftover code from a previous
@@ -561,7 +557,7 @@ Requirements Specific to Affiliated Packages
   or ``awastropy.packagename`` ("affiliated with Astropy").
 
 Examples
---------
+========
 
 This section shows a few examples (not all of which are correct!) to
 illustrate points from the guidelines. These will be moved into the template
@@ -570,7 +566,7 @@ project once it has been written.
 .. _prop-get-set-example:
 
 Properties vs. get\_/set\_
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
 This example shows a sample class illustrating the guideline regarding the use
 of properties as opposed to getter/setter methods.
@@ -601,7 +597,7 @@ a get/set method. For lengthy or complex calculations, however, use a method::
 .. _super-vs-direct-example:
 
 super() vs. Direct Calling
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
 This example shows why the use of :func:`super` leads to a more consistent
 method resolution order than manually calling methods of the super classes in a
@@ -710,7 +706,7 @@ the hierarchy.
 .. _import-star-example:
 
 Acceptable use of ``from module import *``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------------
 
 ``from module import *`` is discouraged in a module that contains
 implementation code, as it impedes clarity and often imports unused variables.
@@ -755,7 +751,7 @@ and ``':class:`AClass'``, but not ``':class:`numpy.array'`` or
 .. _try-except-as-example:
 
 try...except block "as" syntax
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------
 
 Catching of exceptions should always use this syntax::
 
@@ -779,7 +775,7 @@ won't catch `TypeError`.
 
 
 Additional Resources
---------------------
+====================
 
 Further tips and hints relating to the coding guidelines are included below.
 

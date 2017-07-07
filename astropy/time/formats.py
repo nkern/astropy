@@ -38,7 +38,7 @@ TIME_DELTA_FORMATS = OrderedDict()
 
 # Translations between deprecated FITS timescales defined by
 # Rots et al. 2015, A&A 574:A36, and timescales used here.
-FITS_DEPRECATED_SCALES = {'TDT': 'tt', 'TDT': 'tt', 'ET': 'tt',
+FITS_DEPRECATED_SCALES = {'TDT': 'tt', 'ET': 'tt',
                           'GMT': 'utc', 'UT': 'utc', 'IAT': 'tai'}
 
 
@@ -117,6 +117,7 @@ class TimeFormat(object):
     from_jd : bool
         If true then val1, val2 are jd1, jd2
     """
+
     def __init__(self, val1, val2, scale, precision,
                  in_subfmt, out_subfmt, from_jd=False):
         self.scale = scale  # validation of scale done later with _check_scale
@@ -153,18 +154,25 @@ class TimeFormat(object):
                             .format(self.name))
 
         if getattr(val1, 'unit', None) is not None:
-            # set possibly scaled unit any quantities should be converted to
+            # Possibly scaled unit any quantity-likes should be converted to
             _unit = u.CompositeUnit(getattr(self, 'unit', 1.), [u.day], [1])
-            val1 = val1.to(_unit).value
+            val1 = u.Quantity(val1, copy=False).to_value(_unit)
             if val2 is not None:
-                val2 = val2.to(_unit).value
+                val2 = u.Quantity(val2, copy=False).to_value(_unit)
         elif getattr(val2, 'unit', None) is not None:
             raise TypeError('Cannot mix float and Quantity inputs')
 
         if val2 is None:
             val2 = np.zeros_like(val1)
 
-        return val1, val2
+        def asarray_or_scalar(val):
+            """
+            Remove ndarray subclasses since for jd1/jd2 we want a pure ndarray
+            or a Python or numpy scalar.
+            """
+            return np.asarray(val) if isinstance(val, np.ndarray) else val
+
+        return asarray_or_scalar(val1), asarray_or_scalar(val2)
 
     def _check_scale(self, scale):
         """
@@ -325,6 +333,7 @@ class TimeFromEpoch(TimeFormat):
     epoch as a floating point multiple of a unit time interval (e.g. seconds
     or days).
     """
+
     def __init__(self, val1, val2, scale, precision,
                  in_subfmt, out_subfmt, from_jd=False):
         self.scale = scale
@@ -616,6 +625,7 @@ class TimeDatetime(TimeUnique):
 
     value = property(to_value)
 
+
 class TimezoneInfo(datetime.tzinfo):
     """
     Subclass of the `~datetime.tzinfo` object, used in the
@@ -653,9 +663,9 @@ class TimezoneInfo(datetime.tzinfo):
         """
         if utc_offset == 0 and dst == 0 and tzname is None:
             tzname = 'UTC'
-        self._utcoffset = datetime.timedelta(utc_offset.to(u.day).value)
+        self._utcoffset = datetime.timedelta(utc_offset.to_value(u.day))
         self._tzname = tzname
-        self._dst = datetime.timedelta(dst.to(u.day).value)
+        self._dst = datetime.timedelta(dst.to_value(u.day))
 
     def utcoffset(self, dt):
         return self._utcoffset
@@ -666,6 +676,7 @@ class TimezoneInfo(datetime.tzinfo):
     def dst(self, dt):
         return self._dst
 
+
 class TimeString(TimeUnique):
     """
     Base class for string-like time representations.
@@ -675,6 +686,7 @@ class TimeString(TimeUnique):
 
     This is a reference implementation can be made much faster with effort.
     """
+
     def _check_val_type(self, val1, val2):
         # Note: don't care about val2 for these classes
         if val1.dtype.kind not in ('S', 'U'):
@@ -730,7 +742,6 @@ class TimeString(TimeUnique):
 
         iterator = np.nditer([val1, None, None, None, None, None, None],
                              op_dtypes=[val1.dtype] + 5*[np.intc] + [np.double])
-
 
         for val, iy, im, id, ihr, imin, dsec in iterator:
             iy[...], im[...], id[...], ihr[...], imin[...], dsec[...] = (
@@ -958,19 +969,20 @@ class TimeFITS(TimeString):
             fits_scale = tm['scale'].upper()
             scale = FITS_DEPRECATED_SCALES.get(fits_scale, fits_scale.lower())
             if scale not in TIME_SCALES:
-                raise ValueError("Scale {0} is not in the allowed scales {1}"
-                                 .format(repr(scale), sorted(TIME_SCALES)))
+                raise ValueError("Scale {0!r} is not in the allowed scales {1}"
+                                 .format(scale, sorted(TIME_SCALES)))
             # If no scale was given in the initialiser, set the scale to
             # that given in the string.  Also store a possible realization,
             # so we can round-trip (as long as no scale changes are made).
             fits_realization = (tm['realization'].upper()
                                 if tm['realization'] else None)
-            if self._scale is None:
-                self._scale = scale
+            if self._fits_scale is None:
                 self._fits_scale = fits_scale
                 self._fits_realization = fits_realization
-            elif (scale != self.scale or fits_scale != self._fits_scale or
-                  fits_realization != self._fits_realization):
+                if self._scale is None:
+                    self._scale = scale
+            if (scale != self.scale or fits_scale != self._fits_scale or
+                fits_realization != self._fits_realization):
                 raise ValueError("Input strings for {0} class must all "
                                  "have consistent time scales."
                                  .format(self.name))
@@ -1003,6 +1015,7 @@ class TimeEpochDate(TimeFormat):
     """
     Base class for support floating point Besselian and Julian epoch dates
     """
+
     def set_jds(self, val1, val2):
         self._check_scale(self._scale)  # validate scale.
         epoch_to_jd = getattr(erfa, self.epoch_to_jd)
@@ -1044,6 +1057,7 @@ class TimeEpochDateString(TimeString):
     Base class to support string Besselian and Julian epoch dates
     such as 'B1950.0' or 'J2000.0' respectively.
     """
+
     def set_jds(self, val1, val2):
         epoch_prefix = self.epoch_prefix
         iterator = np.nditer([val1, None], op_dtypes=[val1.dtype, np.double])

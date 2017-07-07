@@ -7,11 +7,14 @@ import sys
 
 # LOCAL
 from ..client.vos_catalog import get_remote_catalog_db
-
+from ...utils.decorators import deprecated
 
 __all__ = ['ConeSearchResults']
 
 
+@deprecated(
+    '2.0',
+    alternative='astroquery.vo_conesearch.validator.inspect.ConeSearchResults')
 class ConeSearchResults(object):
     """A class to store Cone Search validation results.
 
@@ -100,7 +103,8 @@ class ConeSearchResults(object):
         if fout is None:  # pragma: no cover
             fout = sys.stdout
 
-        assert typ in self.dbtypes
+        if typ not in self.dbtypes:
+            raise ValueError("'typ' is not one of {}".format(self.dbtypes))
         str_list = []
 
         for cat in self.catkeys[typ]:

@@ -20,11 +20,12 @@ from astropy_helpers.distutils_helpers import get_distutils_build_option
 from astropy.extern import six
 
 WCSROOT = os.path.relpath(os.path.dirname(__file__))
-WCSVERSION = "5.14"
+WCSVERSION = "5.16"
 
 
 def b(s):
     return s.encode('ascii')
+
 
 if six.PY2:
     def string_escape(s):
@@ -245,7 +246,6 @@ def get_wcslib_cfg(cfg, wcslib_files, include_paths):
                 '-Wno-unused-function',
                 '-Wno-unused-value',
                 '-Wno-uninitialized'])
-
 
 
 def get_extensions():

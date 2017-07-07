@@ -1,6 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import os
-from ....tests.helper import pytest
+
+import pytest
 
 from ....table import Table, Column
 
@@ -20,8 +21,8 @@ except ImportError:
 if HAS_BEAUTIFUL_SOUP:
     files.append('t/html.html')
 
-@pytest.mark.parametrize('filename', files)
 
+@pytest.mark.parametrize('filename', files)
 def test_read_generic(filename):
     Table.read(os.path.join(ROOT, filename), format='ascii')
 

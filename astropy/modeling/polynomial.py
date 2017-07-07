@@ -1,11 +1,13 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 """
-This module contains predefined polynomial models.
+This module contains models representing polynomials and polynomial series.
 """
 
 from __future__ import (absolute_import, unicode_literals, division,
                         print_function)
+
+from collections import OrderedDict
 
 import numpy as np
 
@@ -15,11 +17,11 @@ from .parameters import Parameter
 from .utils import poly_map_domain, comb
 from ..utils import indent, check_broadcast
 from ..extern.six.moves import range
-
+from ..units import Quantity
 
 __all__ = [
     'Chebyshev1D', 'Chebyshev2D', 'Hermite1D', 'Hermite2D',
-    'InverseSIP','Legendre1D', 'Legendre2D', 'Polynomial1D',
+    'InverseSIP', 'Legendre1D', 'Legendre2D', 'Polynomial1D',
     'Polynomial2D', 'SIP', 'OrthoPolynomialBase',
     'PolynomialModel'
 ]
@@ -232,15 +234,16 @@ class OrthoPolynomialBase(PolynomialBase):
                 c.append((i, j))
         return np.array(c[::-1])
 
-    def invlex_coeff(self):
-        coeff = []
+    def invlex_coeff(self, coeffs):
+        invlex_coeffs = []
         xvar = np.arange(self.x_degree + 1)
         yvar = np.arange(self.y_degree + 1)
         for j in yvar:
             for i in xvar:
                 name = 'c{0}_{1}'.format(i, j)
-                coeff.append(getattr(self, name))
-        return np.array(coeff[::-1])
+                coeff = coeffs[self.param_names.index(name)]
+                invlex_coeffs.append(coeff)
+        return np.array(invlex_coeffs[::-1])
 
     def _alpha(self):
         invlexdeg = self._invlex()
@@ -302,7 +305,7 @@ class OrthoPolynomialBase(PolynomialBase):
             x = poly_map_domain(x, self.x_domain, self.x_window)
         if self.y_domain is not None:
             y = poly_map_domain(y, self.y_domain, self.y_window)
-        invcoeff = self.invlex_coeff()
+        invcoeff = self.invlex_coeff(coeffs)
         return self.imhorner(x, y, invcoeff)
 
     def prepare_inputs(self, x, y, **kwargs):
@@ -318,8 +321,16 @@ class OrthoPolynomialBase(PolynomialBase):
 
 
 class Chebyshev1D(PolynomialModel):
-    """
-    1D Chebyshev polynomial of the 1st kind.
+    r"""
+    Univariate Chebyshev series.
+
+    It is defined as:
+
+    .. math::
+
+        P(x) = \sum_{i=0}^{i=n}C_{i} * T_{i}(x)
+
+    where ``T_i(x)`` is the corresponding Chebyshev polynomial of the 1st kind.
 
     Parameters
     ----------
@@ -331,6 +342,16 @@ class Chebyshev1D(PolynomialModel):
         Fitters will remap the domain to this window
     **params : dict
         keyword : value pairs, representing parameter_name: value
+
+    Notes
+    -----
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Chebyshev polynomials is a polynomial in x - since the
+    coefficients within each Chebyshev polynomial are fixed, we can't use
+    quantities for x since the units would not be compatible. For example, the
+    third Chebyshev polynomial (T2) is 2x^2-1, but if x was specified with
+    units, 2x^2 and -1 would have incompatible units.
     """
 
     inputs = ('x',)
@@ -404,9 +425,18 @@ class Chebyshev1D(PolynomialModel):
                 c1 = tmp + c1 * x2
         return c0 + c1 * x
 
+
 class Hermite1D(PolynomialModel):
-    """
-    1D Hermite Polynomials ("Physicist's kind")
+    r"""
+    Univariate Hermite series.
+
+    It is defined as:
+
+    .. math::
+
+        P(x) = \sum_{i=0}^{i=n}C_{i} * H_{i}(x)
+
+    where ``H_i(x)`` is the corresponding Hermite polynomial ("Physicist's kind").
 
     Parameters
     ----------
@@ -418,6 +448,16 @@ class Hermite1D(PolynomialModel):
         Fitters will remap the domain to this window
     **params : dict
         keyword : value pairs, representing parameter_name: value
+
+    Notes
+    -----
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Hermite polynomials is a polynomial in x - since the
+    coefficients within each Hermite polynomial are fixed, we can't use
+    quantities for x since the units would not be compatible. For example, the
+    third Hermite polynomial (H2) is 4x^2-2, but if x was specified with units,
+    4x^2 and -2 would have incompatible units.
     """
 
     inputs = ('x')
@@ -491,13 +531,16 @@ class Hermite1D(PolynomialModel):
                 c1 = temp + c1 * x2
         return c0 + c1 * x2
 
+
 class Hermite2D(OrthoPolynomialBase):
     r"""
-    2D Hermite polynomial.
+    Bivariate Hermite series.
 
     It is defined as
 
-    .. math:: P_{n_m}(x,y) = \sum c_{n_m}  H_n(x) H_m(y)
+    .. math:: P_{nm}(x,y) = \sum_{n,m=0}^{n=d,m=d}C_{nm} H_n(x) H_m(y)
+
+    where ``H_n(x)`` and ``H_m(y)`` are Hermite polynomials.
 
     Parameters
     ----------
@@ -517,10 +560,19 @@ class Hermite2D(OrthoPolynomialBase):
     **params : dict
         keyword: value pairs, representing parameter_name: value
 
+    Notes
+    -----
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Hermite polynomials is a polynomial in x and/or y - since the
+    coefficients within each Hermite polynomial are fixed, we can't use
+    quantities for x and/or y since the units would not be compatible. For
+    example, the third Hermite polynomial (H2) is 4x^2-2, but if x was
+    specified with units, 4x^2 and -2 would have incompatible units.
     """
 
     def __init__(self, x_degree, y_degree, x_domain=None, x_window=[-1, 1],
-                 y_domain=None, y_window=[-1,1], n_models=None,
+                 y_domain=None, y_window=[-1, 1], n_models=None,
                  model_set_axis=None, name=None, meta=None, **params):
         super(Hermite2D, self).__init__(
             x_degree, y_degree, x_domain=x_domain, y_domain=y_domain,
@@ -602,9 +654,18 @@ class Hermite2D(OrthoPolynomialBase):
                 d[i] = x2 * d[i - 1] - 2 * (i - 1) * d[i - 2]
         return np.rollaxis(d, 0, d.ndim)
 
+
 class Legendre1D(PolynomialModel):
-    """
-    1D Legendre polynomial.
+    r"""
+    Univariate Legendre series.
+
+    It is defined as:
+
+    .. math::
+
+        P(x) = \sum_{i=0}^{i=n}C_{i} * L_{i}(x)
+
+    where ``L_i(x)`` is the corresponding Legendre polynomial.
 
     Parameters
     ----------
@@ -616,6 +677,17 @@ class Legendre1D(PolynomialModel):
         Fitters will remap the domain to this window
     **params : dict
         keyword: value pairs, representing parameter_name: value
+
+
+    Notes
+    -----
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Legendre polynomials is a polynomial in x - since the
+    coefficients within each Legendre polynomial are fixed, we can't use
+    quantities for x since the units would not be compatible. For example, the
+    third Legendre polynomial (P2) is 1.5x^2-0.5, but if x was specified with
+    units, 1.5x^2 and -0.5 would have incompatible units.
     """
 
     inputs = ('x',)
@@ -689,8 +761,14 @@ class Legendre1D(PolynomialModel):
 
 
 class Polynomial1D(PolynomialModel):
-    """
+    r"""
     1D Polynomial model.
+
+    It is defined as:
+
+    .. math::
+
+        P = \sum_{i=0}^{i=n}C_{i} * x^{i}
 
     Parameters
     ----------
@@ -702,6 +780,7 @@ class Polynomial1D(PolynomialModel):
         Fitters will remap the domain to this window
     **params : dict
         keyword: value pairs, representing parameter_name: value
+
     """
 
     inputs = ('x',)
@@ -754,10 +833,27 @@ class Polynomial1D(PolynomialModel):
 
     @staticmethod
     def horner(x, coeffs):
-        c0 = coeffs[-1] + x * 0
-        for i in range(2, len(coeffs) + 1):
-            c0 = coeffs[-i] + c0 * x
+        if len(coeffs) == 1:
+            c0 = coeffs[-1] * np.ones_like(x, subok=False)
+        else:
+            c0 = coeffs[-1]
+            for i in range(2, len(coeffs) + 1):
+                c0 = coeffs[-i] + c0 * x
         return c0
+
+    @property
+    def input_units(self):
+        if self.degree == 0 or self.c1.unit is None:
+            return None
+        else:
+            return {'x': self.c0.unit / self.c1.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        mapping = []
+        for i in range(self.degree + 1):
+            par = getattr(self, 'c{0}'.format(i))
+            mapping.append((par.name, outputs_unit['y'] / inputs_unit['x'] ** i))
+        return OrderedDict(mapping)
 
 
 class Polynomial2D(PolynomialModel):
@@ -899,23 +995,45 @@ class Polynomial2D(PolynomialModel):
         r1 = r0 * 0.0
         r2 = r0 * 0.0
         karr = np.diff(alpha, axis=0)
+
         for n in range(len(karr)):
             if karr[n, 1] != 0:
                 r2 = y * (r0 + r1 + r2)
-                r1 = coeffs[0] * 0.
+                r1 = np.zeros_like(coeffs[0], subok=False)
             else:
                 r1 = x * (r0 + r1)
             r0 = coeffs[n + 1]
         return r0 + r1 + r2
 
+    @property
+    def input_units(self):
+        if self.degree == 0 or (self.c1_0.unit is None and self.c0_1.unit is None):
+            return None
+        else:
+            return {'x': self.c0_0.unit / self.c1_0.unit,
+                    'y': self.c0_0.unit / self.c0_1.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        mapping = []
+        for i in range(self.degree + 1):
+            for j in range(self.degree + 1):
+                if i + j > 2:
+                    continue
+                par = getattr(self, 'c{0}_{1}'.format(i, j))
+                mapping.append((par.name, outputs_unit['z'] / inputs_unit['x'] ** i / inputs_unit['y'] ** j))
+        return OrderedDict(mapping)
+
 
 class Chebyshev2D(OrthoPolynomialBase):
     r"""
-    2D Chebyshev polynomial of the 1st kind.
+    Bivariate Chebyshev series..
 
     It is defined as
 
-    .. math:: P_{n_m}(x,y) = \sum C_{n_m}  T_n(x) T_m(y)
+    .. math:: P_{nm}(x,y) = \sum_{n,m=0}^{n=d,m=d}C_{nm}  T_n(x ) T_m(y)
+
+    where ``T_n(x)`` and ``T_m(y)`` are Chebyshev polynomials of the first kind.
+
 
     Parameters
     ----------
@@ -935,10 +1053,19 @@ class Chebyshev2D(OrthoPolynomialBase):
     **params : dict
         keyword: value pairs, representing parameter_name: value
 
+    Notes
+    -----
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Chebyshev polynomials is a polynomial in x and/or y - since
+    the coefficients within each Chebyshev polynomial are fixed, we can't use
+    quantities for x and/or y since the units would not be compatible. For
+    example, the third Chebyshev polynomial (T2) is 2x^2-1, but if x was
+    specified with units, 2x^2 and -1 would have incompatible units.
     """
 
     def __init__(self, x_degree, y_degree, x_domain=None, x_window=[-1, 1],
-                 y_domain=None, y_window=[-1,1], n_models=None,
+                 y_domain=None, y_window=[-1, 1], n_models=None,
                  model_set_axis=None, name=None, meta=None, **params):
         super(Chebyshev2D, self).__init__(
             x_degree, y_degree, x_domain=x_domain, y_domain=y_domain,
@@ -1022,13 +1149,14 @@ class Chebyshev2D(OrthoPolynomialBase):
 
 
 class Legendre2D(OrthoPolynomialBase):
-    """
-    Legendre 2D polynomial.
+    r"""
+    Bivariate Legendre series.
 
     Defined as:
 
-    .. math:: P_{nm}(x,y) = C_{n_m}  L_n(x ) L_m(y)
+    .. math:: P_{n_m}(x,y) = \sum_{n,m=0}^{n=d,m=d}C_{nm}  L_n(x ) L_m(y)
 
+    where ``L_n(x)`` and ``L_m(y)`` are Legendre polynomials.
 
     Parameters
     ----------
@@ -1047,6 +1175,23 @@ class Legendre2D(OrthoPolynomialBase):
         range of the y independent variable
     **params : dict
         keyword: value pairs, representing parameter_name: value
+
+    Notes
+    -----
+    Model formula:
+
+    .. math::
+
+        P(x) = \sum_{i=0}^{i=n}C_{i} * L_{i}(x)
+
+    where ``L_{i}`` is the corresponding Legendre polynomial.
+
+    This model does not support the use of units/quantities, because each term
+    in the sum of Legendre polynomials is a polynomial in x - since the
+    coefficients within each Legendre polynomial are fixed, we can't use
+    quantities for x since the units would not be compatible. For example, the
+    third Legendre polynomial (P2) is 1.5x^2-0.5, but if x was specified with
+    units, 1.5x^2 and -0.5 would have incompatible units.
     """
 
     def __init__(self, x_degree, y_degree, x_domain=None, x_window=[-1, 1],
@@ -1249,7 +1394,6 @@ class SIP(Model):
     ----------
     .. [1] `David Shupe, et al, ADASS, ASP Conference Series, Vol. 347, 2005 <http://adsabs.harvard.edu/abs/2005ASPC..347..491S>`_
     """
-
 
     inputs = ('u', 'v')
     outputs = ('x', 'y')

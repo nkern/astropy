@@ -148,7 +148,7 @@ class TestRunnerBase(object):
         args = []
         for keyword in keywords.keys():
             func = getattr(self, keyword)
-            result = func(keywords[keyword], self.keywords)
+            result = func(keywords[keyword], keywords)
 
             # Allow disabaling of options in a subclass
             if result is NotImplemented:
@@ -176,12 +176,13 @@ class TestRunnerBase(object):
         --------
         pytest.main : This method builds arguments for and then calls this function.
         """
+
     def run_tests(self, **kwargs):
         # The docstring for this method is defined as a class variable.
         # This allows it to be built for each subclass in __new__.
 
         # Don't import pytest until it's actually needed to run the tests
-        from .helper import pytest
+        import pytest
 
         # Raise error for undefined kwargs
         allowed_kwargs = set(self.keywords.keys())

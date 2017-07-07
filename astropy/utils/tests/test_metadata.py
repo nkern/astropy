@@ -2,9 +2,10 @@ import abc
 
 from collections import OrderedDict
 
+import pytest
+
 from ..metadata import MetaData, MergeConflictError, merge, enable_merge_strategies
 from ...utils import metadata
-from ...tests.helper import pytest
 from ...io import fits
 
 
@@ -21,7 +22,6 @@ class MetaBaseTest(object):
         assert isinstance(d.meta, OrderedDict)
         assert len(d.meta) == 0
 
-
     @pytest.mark.parametrize(('meta'), ([dict([('a', 1)]),
                                          OrderedDict([('a', 1)]),
                                          OrderedDictSubclass([('a', 1)])]))
@@ -30,12 +30,10 @@ class MetaBaseTest(object):
         assert type(d.meta) == type(meta)
         assert d.meta['a'] == 1
 
-
     @pytest.mark.parametrize(('meta'), (["ceci n'est pas un meta", 1.2, [1, 2, 3]]))
     def test_non_mapping_init(self, meta):
         with pytest.raises(TypeError):
             self.test_class(*self.args, meta=meta)
-
 
     @pytest.mark.parametrize(('meta'), ([dict([('a', 1)]),
                                          OrderedDict([('a', 1)]),
@@ -45,12 +43,10 @@ class MetaBaseTest(object):
         assert type(d.meta) == type(meta)
         assert d.meta['a'] == 1
 
-
     @pytest.mark.parametrize(('meta'), (["ceci n'est pas un meta", 1.2, [1, 2, 3]]))
     def test_non_mapping_set(self, meta):
         with pytest.raises(TypeError):
             d = self.test_class(*self.args, meta=meta)
-
 
     def test_meta_fits_header(self):
 
@@ -90,6 +86,7 @@ def test_metadata_merging_conflict_exception():
 
 
 import numpy as np
+
 
 def test_metadata_merging():
     # Recursive merge
@@ -190,6 +187,5 @@ def test_metadata_merging_new_strategy():
     assert out['k2'] == 'ab'
     assert not MergeNumbersAsList.enabled
     assert not MergeConcatStrings.enabled
-
 
     metadata.MERGE_STRATEGIES = original_merge_strategies

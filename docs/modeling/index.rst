@@ -69,8 +69,8 @@ Model parameters can be accessed as attributes::
     Parameter('amplitude', value=1.2)
     >>> g.mean
     Parameter('mean', value=0.9)
-    >>> g.stddev
-    Parameter('stddev', value=0.5)
+    >>> g.stddev  # doctest: +FLOAT_CMP
+    Parameter('stddev', value=0.5, bounds=(1.1754943508222875e-38, None))
 
 and can also be updated via those attributes::
 
@@ -288,7 +288,8 @@ without specifying any parameter values up front.  This more advanced usage is
 explained in more detail in the :ref:`compound model documentation
 <compound-model-classes>`.
 
-These new compound models can also be fitted to data, like most other models:
+These new compound models can also be fitted to data, like most other models
+(though this currently requires one of the non-linear fitters):
 
 .. plot::
     :include-source:
@@ -322,6 +323,30 @@ are some complexities involved in correctly matching up the inputs and outputs
 of all models used to build a compound model.  You can learn more details in
 the :doc:`compound-models` documentation.
 
+Astropy models also support convolution through the function
+`~astropy.convolution.convolve_models`, which returns a compound model.
+
+For instance, the convolution of two Gaussian functions is also a Gaussian
+function in which the resulting mean (variance) is the sum of the means
+(variances) of each Gaussian.
+
+.. plot::
+    :include-source:
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from astropy.modeling import models
+    from astropy.convolution import convolve_models
+
+    g1 = models.Gaussian1D(1, -1, 1)
+    g2 = models.Gaussian1D(1, 1, 1)
+    g3 = convolve_models(g1, g2)
+
+    x = np.linspace(-3, -3, 50)
+    plt.plot(x, g1(x), 'k-')
+    plt.plot(x, g2(x), 'k-')
+    plt.plot(x, g3(x), 'k-')
+
 .. _modeling-using:
 
 Using `astropy.modeling`
@@ -337,7 +362,7 @@ Using `astropy.modeling`
    new
    bounding-boxes
    algorithms
-
+   units
 
 Reference/API
 =============
@@ -345,6 +370,7 @@ Reference/API
 .. automodapi:: astropy.modeling
 .. automodapi:: astropy.modeling.functional_models
 .. automodapi:: astropy.modeling.powerlaws
+.. automodapi:: astropy.modeling.blackbody
 .. automodapi:: astropy.modeling.polynomial
 .. automodapi:: astropy.modeling.projections
 .. automodapi:: astropy.modeling.rotations

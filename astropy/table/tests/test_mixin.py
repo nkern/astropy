@@ -14,16 +14,18 @@ try:
 except ImportError:
     HAS_YAML = False
 
-import numpy as np
 import copy
+
+import pytest
+import numpy as np
 
 from ...extern import six
 from ...extern.six.moves import cPickle as pickle, cStringIO as StringIO
-from ...tests.helper import pytest
 from ...table import Table, QTable, join, hstack, vstack, Column, NdarrayMixin
 from ... import time
 from ... import coordinates
 from ... import units as u
+from ..column import BaseColumn
 from .. import table_helpers
 from .conftest import MIXIN_COLS
 
@@ -61,7 +63,10 @@ def test_attributes(mixin_cols):
 
 
 def check_mixin_type(table, table_col, in_col):
-    if ((isinstance(in_col, u.Quantity) and type(table) is not QTable)
+    # We check for QuantityInfo rather than just isinstance(col, u.Quantity)
+    # since we want to treat EarthLocation as a mixin, even though it is
+    # a Quantity subclass.
+    if ((isinstance(in_col.info, u.QuantityInfo) and type(table) is not QTable)
             or isinstance(in_col, Column)):
         assert type(table_col) is table.ColumnClass
     else:
@@ -69,6 +74,7 @@ def check_mixin_type(table, table_col, in_col):
 
     # Make sure in_col got copied and creating table did not touch it
     assert in_col.info.name is None
+
 
 def test_make_table(table_types, mixin_cols):
     """
@@ -102,14 +108,44 @@ def test_io_ascii_write():
             t.write(out, format=fmt['Format'])
 
 
+def test_io_quantity_write(tmpdir):
+    """
+    Test that table with Quantity mixin column can be written by io.fits,
+    io.votable but not by io.misc.hdf5. Validation of the output is done.
+    Test that io.fits writes a table containing Quantity mixin columns that can
+    be round-tripped (metadata unit).
+    """
+    t = QTable()
+    t['a'] = u.Quantity([1, 2, 4], unit='Angstrom')
+
+    filename = tmpdir.join("table-tmp").strpath
+    open(filename, 'w').close()
+
+    # Show that FITS and VOTable formats succeed
+    for fmt in ('fits', 'votable'):
+        t.write(filename, format=fmt, overwrite=True)
+        qt = QTable.read(filename, format=fmt)
+        assert isinstance(qt['a'], u.Quantity)
+        assert qt['a'].unit == 'Angstrom'
+
+    # Show that HDF5 format fails
+    if HAS_H5PY:
+        with pytest.raises(ValueError) as err:
+            t.write(filename, format='hdf5', overwrite=True)
+        assert 'cannot write table with mixin column(s)' in str(err.value)
+
+
 def test_io_write_fail(mixin_cols):
     """
-    Test that table with mixin column cannot be written by io.votable,
-    io.fits, and io.misc.hdf5
-    every pure Python writer.  No validation of the output is done,
-    this just confirms no exceptions.
+    Test that table with mixin column (excluding Quantity) cannot be written by io.votable,
+    io.fits, and io.misc.hdf5.
     """
     t = QTable(mixin_cols)
+    # Only do this test if there are unsupported column types (i.e. anything besides
+    # BaseColumn or Quantity subclasses.
+    unsupported_cols = t.columns.not_isinstance((BaseColumn, u.Quantity))
+    if not unsupported_cols:
+        pytest.skip("no unsupported column types")
     for fmt in ('fits', 'votable', 'hdf5'):
         if fmt == 'hdf5' and not HAS_H5PY:
             continue
@@ -150,7 +186,7 @@ def test_join(table_types):
             assert t12[name2].info.description == name + '2'
 
     for join_type in ('outer', 'right'):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(NotImplementedError) as exc:
             t12 = join(t1, t2, keys='a', join_type=join_type)
         assert 'join requires masking column' in str(exc.value)
 
@@ -161,6 +197,7 @@ def test_join(table_types):
     # Join does work for a mixin which is a subclass of np.ndarray
     t12 = join(t1, t2, keys=['quantity'])
     assert np.all(t12['a_1'] == t1['a'])
+
 
 def test_hstack(table_types):
     """
@@ -180,7 +217,7 @@ def test_hstack(table_types):
             if chop:
                 t2 = t2[:-1]
                 if join_type == 'outer':
-                    with pytest.raises(ValueError) as exc:
+                    with pytest.raises(NotImplementedError) as exc:
                         t12 = hstack([t1, t2], join_type=join_type)
                     assert 'hstack requires masking column' in str(exc.value)
                     continue
@@ -207,11 +244,12 @@ def assert_table_name_col_equal(t, name, col):
         assert np.all(t[name].dec == col.dec)
     elif isinstance(col, u.Quantity):
         if type(t) is QTable:
-            assert np.all(t[name].value == col.value)
+            assert np.all(t[name] == col)
     elif isinstance(col, table_helpers.ArrayWrapper):
         assert np.all(t[name].data == col.data)
     else:
         assert np.all(t[name] == col)
+
 
 def test_get_items(mixin_cols):
     """
@@ -231,6 +269,7 @@ def test_get_items(mixin_cols):
         for attr in attrs:
             assert getattr(t2['m'].info, attr) == getattr(m.info, attr)
             assert getattr(m2.info, attr) == getattr(m.info, attr)
+
 
 def test_info_preserved_pickle_copy_init(mixin_cols):
     """
@@ -277,17 +316,37 @@ def test_add_column(mixin_cols):
     m.info.meta = {'a': 1}
     t = QTable([m])
 
-    # Add columns m2 and m3 by two different methods and test expected equality
+    # Add columns m2, m3, m4 by two different methods and test expected equality
     t['m2'] = m
     m.info.name = 'm3'
     t.add_columns([m], copy=True)
     m.info.name = 'm4'
     t.add_columns([m], copy=False)
     for name in ('m2', 'm3', 'm4'):
-        assert_table_name_col_equal(t, 'm', t[name])
+        assert_table_name_col_equal(t, name, m)
         for attr in attrs:
             if attr != 'name':
                 assert getattr(t['m'].info, attr) == getattr(t[name].info, attr)
+    # Also check that one can set using a scalar.
+    s = m[0]
+    if type(s) is type(m):
+        # We're not going to worry about testing classes for which scalars
+        # are a different class than the real array (and thus loose info, etc.)
+        t['s'] = m[0]
+        assert_table_name_col_equal(t, 's', m[0])
+        for attr in attrs:
+            if attr != 'name':
+                assert getattr(t['m'].info, attr) == getattr(t['s'].info, attr)
+
+    # While we're add it, also check a length-1 table.
+    t = QTable([m[1:2]], names=['m'])
+    if type(s) is type(m):
+        t['s'] = m[0]
+        assert_table_name_col_equal(t, 's', m[0])
+        for attr in attrs:
+            if attr != 'name':
+                assert getattr(t['m'].info, attr) == getattr(t['s'].info, attr)
+
 
 def test_vstack():
     """
@@ -297,6 +356,7 @@ def test_vstack():
     t2 = QTable(MIXIN_COLS)
     with pytest.raises(NotImplementedError):
         vstack([t1, t2])
+
 
 def test_insert_row(mixin_cols):
     """
@@ -313,6 +373,7 @@ def test_insert_row(mixin_cols):
             t.insert_row(1, t[-1])
         assert "Unable to insert row" in str(exc.value)
 
+
 def test_insert_row_bad_unit():
     """
     Insert a row into a QTable with the wrong unit
@@ -321,6 +382,7 @@ def test_insert_row_bad_unit():
     with pytest.raises(ValueError) as exc:
         t.insert_row(0, (2 * u.m / u.s,))
     assert "'m / s' (speed) and 'm' (length) are not convertible" in str(exc.value)
+
 
 def test_convert_np_array(mixin_cols):
     """
@@ -332,6 +394,7 @@ def test_convert_np_array(mixin_cols):
     m = mixin_cols['m']
     dtype_kind = m.dtype.kind if hasattr(m, 'dtype') else 'O'
     assert ta['m'].dtype.kind == dtype_kind
+
 
 def test_assignment_and_copy():
     """
@@ -355,6 +418,7 @@ def test_assignment_and_copy():
                 assert np.all(t0['m'][i0] == m[i0])
                 assert np.all(t0['m'][i0] != t['m'][i0])
 
+
 def test_grouping():
     """
     Test grouping with mixin columns.  Raises not yet implemented error.
@@ -363,6 +427,7 @@ def test_grouping():
     t['index'] = ['a', 'b', 'b', 'c']
     with pytest.raises(NotImplementedError):
         t.group_by('index')
+
 
 def test_conversion_qtable_table():
     """
@@ -387,6 +452,7 @@ def test_conversion_qtable_table():
     for name in names:
         assert qt2[name].info.description == name
         assert_table_name_col_equal(qt2, name, qt[name])
+
 
 @pytest.mark.xfail
 def test_column_rename():

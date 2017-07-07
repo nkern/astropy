@@ -7,7 +7,9 @@ import imp
 import sys
 import warnings
 
-from .helper import pytest, catch_warnings
+import pytest
+
+from .helper import catch_warnings
 from .. import log
 from ..logger import LoggingError, conf
 from ..utils.exceptions import AstropyWarning, AstropyUserWarning
@@ -45,7 +47,9 @@ def setup_function(function):
     if log.exception_logging_enabled():
         log.disable_exception_logging()
 
+
 teardown_module = setup_function
+
 
 def test_warnings_logging_disable_no_enable():
     with pytest.raises(LoggingError) as e:

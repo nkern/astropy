@@ -8,14 +8,12 @@ from collections import OrderedDict
 
 import numpy as np
 
-from ...extern import six
 from ...extern.six.moves import cStringIO as StringIO
 from ... import units as u
 from ... import time
 from ... import coordinates
 from ... import table
 from ...utils.data_info import data_info_factory, dtype_info_name
-from ...utils.compat import NUMPY_LT_1_8
 from ..table_helpers import simple_table
 
 
@@ -42,9 +40,9 @@ def test_table_info_attributes(table_types):
     t['d'] = [1, 2, 3] * u.m
     t['d'].description = 'quantity'
     t['a'].format = '%02d'
-    t['e'] = time.Time([1,2,3], format='mjd')
+    t['e'] = time.Time([1, 2, 3], format='mjd')
     t['e'].info.description = 'time'
-    t['f'] = coordinates.SkyCoord([1,2,3], [1,2,3], unit='deg')
+    t['f'] = coordinates.SkyCoord([1, 2, 3], [1, 2, 3], unit='deg')
     t['f'].info.description = 'skycoord'
 
     tinfo = t.info(out=None)
@@ -61,6 +59,7 @@ def test_table_info_attributes(table_types):
     out = StringIO()
     t.info(out=out)
     assert repr(t.info) == out.getvalue()
+
 
 def test_table_info_stats(table_types):
     """
@@ -116,7 +115,8 @@ def test_table_info_stats(table_types):
     assert np.all(tinfo['name'] == ['a', 'b', 'c', 'd'])
     assert np.all(tinfo['dtype'] == ['int32', 'float32', dtype_info_name('S1'), 'object'])
     assert np.all(tinfo['sum'] == ['6', '6.0', '--', '--'])
-    assert np.all(tinfo['first'] == ['1', '1.0', 'a' if six.PY2 else "b'a'", '1.0'])
+    assert np.all(tinfo['first'] == ['1', '1.0', 'a', '1.0'])
+
 
 def test_data_info():
     """
@@ -157,14 +157,14 @@ def test_data_info():
 
         # Test stats info
         cinfo = c.info('stats', out=None)
-        is_nan = NUMPY_LT_1_8 and type(c) is table.Column
         assert cinfo == OrderedDict([('name', 'name'),
-                                     ('mean', 'nan' if is_nan else '1.5'),
-                                     ('std', 'nan' if is_nan else '0.5'),
-                                     ('min', 'nan' if is_nan else '1.0'),
-                                     ('max', 'nan' if is_nan else '2.0'),
+                                     ('mean', '1.5'),
+                                     ('std', '0.5'),
+                                     ('min', '1.0'),
+                                     ('max', '2.0'),
                                      ('n_bad', 1),
                                      ('length', 3)])
+
 
 def test_data_info_subclass():
     class Column(table.Column):

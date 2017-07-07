@@ -1,9 +1,12 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
+
+import pytest
 import numpy as np
 from numpy.testing import assert_allclose
-from ...tests.helper import pytest, assert_quantity_allclose
+
+from ...tests.helper import assert_quantity_allclose
 from ..utils import (extract_array, add_array, subpixel_indices,
                      block_reduce, block_replicate,
                      overlap_slices, NoOverlapError, PartialOverlapError,
@@ -91,7 +94,7 @@ def test_extract_array_1d_even():
     '''
     assert np.all(extract_array(np.arange(4), (2, ), (0, ), fill_value=-99) == np.array([-99, 0]))
     for i in [1, 2, 3]:
-        assert np.all(extract_array(np.arange(4), (2, ), (i, )) == np.array([i -1 , i]))
+        assert np.all(extract_array(np.arange(4), (2, ), (i, )) == np.array([i - 1, i]))
     assert np.all(extract_array(np.arange(4.), (2, ), (4, ), fill_value=np.inf) == np.array([3, np.inf]))
 
 
@@ -106,13 +109,13 @@ def test_extract_array_1d_odd():
     '''
     assert np.all(extract_array(np.arange(4), (3,), (-1, ), fill_value=-99) == np.array([-99, -99, 0]))
     assert np.all(extract_array(np.arange(4), (3,), (0, ), fill_value=-99) == np.array([-99, 0, 1]))
-    for i in [1,2]:
+    for i in [1, 2]:
         assert np.all(extract_array(np.arange(4), (3,), (i, )) == np.array([i-1, i, i+1]))
     assert np.all(extract_array(np.arange(4), (3,), (3, ), fill_value=-99) == np.array([2, 3, -99]))
     arrayin = np.arange(4.)
     extracted = extract_array(arrayin, (3,), (4, ))
     assert extracted[0] == 3
-    assert np.isnan(extracted[1]) # since I cannot use `==` to test for nan
+    assert np.isnan(extracted[1])  # since I cannot use `==` to test for nan
     assert extracted.dtype == arrayin.dtype
 
 
@@ -135,7 +138,7 @@ def test_extract_array_1d_trim():
     '''
     assert np.all(extract_array(np.arange(4), (2, ), (0, ), mode='trim') == np.array([0]))
     for i in [1, 2, 3]:
-        assert np.all(extract_array(np.arange(4), (2, ), (i, ), mode='trim') == np.array([i -1 , i]))
+        assert np.all(extract_array(np.arange(4), (2, ), (i, ), mode='trim') == np.array([i - 1, i]))
     assert np.all(extract_array(np.arange(4.), (2, ), (4, ), mode='trim') == np.array([3]))
 
 
@@ -333,8 +336,8 @@ class TestCutout2D(object):
         wcs.wcs.cd = [[scale*np.cos(rho), -scale*np.sin(rho)],
                         [scale*np.sin(rho), scale*np.cos(rho)]]
         wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
-        wcs.wcs.crval = [self.position.ra.to(u.deg).value,
-                         self.position.dec.to(u.deg).value]
+        wcs.wcs.crval = [self.position.ra.to_value(u.deg),
+                         self.position.dec.to_value(u.deg)]
         wcs.wcs.crpix = [3, 3]
         self.wcs = wcs
 
@@ -388,7 +391,7 @@ class TestCutout2D(object):
 
     def test_size_angle_without_wcs(self):
         with pytest.raises(ValueError):
-            Cutout2D(self.data, (2, 2), (3, 3* u.arcsec))
+            Cutout2D(self.data, (2, 2), (3, 3 * u.arcsec))
 
     def test_cutout_trim_overlap(self):
         c = Cutout2D(self.data, (0, 0), (3, 3), mode='trim')

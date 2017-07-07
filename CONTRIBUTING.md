@@ -38,43 +38,56 @@ include the following:
 
 - **Changelog entry**: whether you are fixing a bug or adding new
   functionality, you should add an entry to the ``CHANGES.rst`` file that
-  includes if possible the issue number (if you are opening a pull request you
-  may not know this yet, but you can add it once the pull request is open). If
-  you're not sure where to put the changelog entry, wait at least until a
-  maintainer has reviewed your PR and assigned it to a milestone.
+  includes the PR number and if possible the issue number (if you are
+  opening a pull request you may not know this yet, but you can add it once
+  the pull request is open). If you're not sure where to put the changelog
+  entry, wait at least until a maintainer has reviewed your PR and assigned
+  it to a milestone.
 
   You do not need to include a changelog entry for fixes to bugs introduced in
-  the developer version and which are not present in the stable releases.  In
-  general you do not need to include a changelog entry for minor documentation
-  or test updates.  Only user-visible changes (new features/API changes, fixed
-  issues) need to be mentioned.  If in doubt ask the core maintainer reviewing
-  your changes.
+  the developer version and therefore are not present in the stable releases.
+  In general you do not need to include a changelog entry for minor
+  documentation or test updates.  Only user-visible changes (new features/API
+  changes, fixed issues) need to be mentioned.  If in doubt ask the core
+  maintainer reviewing your changes.
 
 Other Tips
 ----------
 
-- When contributing trivial documentation fixes (i.e. fixes to typos, spelling,
-  grammar) that do not contain any special markup and are not associated with code
-  changes, include the string "[skip ci]" at the end of your commit message.
-  For example:
+- To prevent the automated tests from running you can add ``[ci
+  skip]`` to your commit message. This is useful if your PR is a work
+  in progress and you are not yet ready for the tests to run.  For
+  example:
 
-      $ git commit -m "Fixed typo [skip ci]"
-
-  This will prevent automated tests for running against your change, freeing
-  up resources for testing non-trivial changes.
+      $ git commit -m "WIP widget [ci skip]"
 
   - If you already made the commit without including this string, you can edit
     your existing commit message by running:
 
         $ git commit --amend
 
-- To skip only the AppVeyor (Windows) CI builds you can use "[skip appveyor]".
-  But there is (currently) no possibility to only skip the Travis CI builds.
+- To skip only the AppVeyor (Windows) CI builds you can use ``[skip
+  appveyor]``, and to skip testing on Travis CI use ``[skip travis]``.
+
+- If your commit makes substantial changes to the documentation, but no code
+  changes, the you can use ``[docs only]``, that will skip all but the
+  documentation building jobs on Travis.
+
+- When contributing trivial documentation fixes (i.e. fixes to typos,
+  spelling, grammar) that do not contain any special markup and are
+  not associated with code changes, please include the string ``[docs
+  only]`` in your commit message.
+
+      $ git commit -m "Fixed typo [docs only]"
+
 
 Checklist for Contributed Code
 ------------------------------
 
-A pull request for a new feature will be reviewed to see if it meets the following requirements.  For any pull request, an astropy maintainer can help to make sure that the pull request meets the requirements for inclusion in the package.
+A pull request for a new feature will be reviewed to see if it meets the
+following requirements.  For any pull request, an astropy maintainer can
+help to make sure that the pull request meets the requirements for inclusion
+in the package.
 
 **Scientific Quality**
 (when applicable)
@@ -88,7 +101,7 @@ A pull request for a new feature will be reviewed to see if it meets the followi
     followed?
   * Is the code compatible with Python 2.6, 2.7, as well as >=3.3?
   * Are there dependencies other than the Astropy core, the Python Standard
-    Library, and NumPy 1.6.0 or later?
+    Library, and NumPy 1.9.0 or later?
     * Is the package importable even if the C-extensions are not built?
     * Are additional dependencies handled appropriately?
     * Do functions that require additional dependencies  raise an `ImportError`
@@ -120,6 +133,6 @@ A pull request for a new feature will be reviewed to see if it meets the followi
   * Are there any conflicts with this code and existing codes?
 
 **astropy requirements**
-  * Do all the tests pass on the Travis and AppVeyor build?
+  * Do all the Travis CI, AppVeyor, and CircleCI tests pass?
   * If applicable, has an entry been added into the changelog?
   * Can you checkout the pull request and repeat the examples and tests?

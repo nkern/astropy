@@ -36,7 +36,7 @@ from .formats import TimeFromEpoch  # pylint: disable=W0611
 
 
 __all__ = ['Time', 'TimeDelta', 'TIME_SCALES', 'TIME_DELTA_SCALES',
-           'ScaleValueError', 'OperandTypeError']
+           'ScaleValueError', 'OperandTypeError', 'TimeInfo']
 
 
 TIME_SCALES = ('tai', 'tcb', 'tcg', 'tdb', 'tt', 'ut1', 'utc')
@@ -101,10 +101,41 @@ class TimeInfo(MixinInfo):
     be used as a general way to store meta information.
     """
     attrs_from_parent = set(['unit'])  # unit is read-only and None
+    attr_names = MixinInfo.attr_names | {'serialize_method'}
     _supports_indexing = True
-    _represent_as_dict_attrs = ('jd1', 'jd2', 'format', 'scale', 'precision',
-                                'in_subfmt', 'out_subfmt', 'location',
-                                '_delta_ut1_utc', '_delta_tdb_tt')
+
+    # The usual tuple of attributes needed for serialization is replaced
+    # by a property, since Time can be serialized different ways.
+    _represent_as_dict_extra_attrs = ('format', 'scale', 'precision',
+                                      'in_subfmt', 'out_subfmt', 'location',
+                                      '_delta_ut1_utc', '_delta_tdb_tt')
+
+    @property
+    def _represent_as_dict_attrs(self):
+        method = self.serialize_method[self._serialize_context]
+        if method == 'formatted_value':
+            out = ('value',)
+        elif method == 'jd1_jd2':
+            out = ('jd1', 'jd2')
+        else:
+            raise ValueError("serialize method must be 'formatted_value' or 'jd1_jd2'")
+
+        return out + self._represent_as_dict_extra_attrs
+
+    def __init__(self, bound=False):
+        super(MixinInfo, self).__init__(bound)
+
+        # If bound to a data object instance then create the dict of attributes
+        # which stores the info attribute values.
+        if bound:
+            # Specify how to serialize this object depending on context.
+            # If ``True`` for a context, then use formatted ``value`` attribute
+            # (e.g. the ISO time string).  If ``False`` then use decimal jd1 and jd2.
+            self.serialize_method = {'fits': 'jd1_jd2',
+                                     'ecsv': 'formatted_value',
+                                     'hdf5': 'jd1_jd2',
+                                     'yaml': 'jd1_jd2',
+                                     None: 'jd1_jd2'}
 
     @property
     def unit(self):
@@ -116,17 +147,25 @@ class TimeInfo(MixinInfo):
     # When Time has mean, std, min, max methods:
     # funcs = [lambda x: getattr(x, stat)() for stat_name in MixinInfo._stats])
 
-    def _construct_from_dict(self, map):
-        format = map.pop('format')
-        delta_ut1_utc = map.pop('_delta_ut1_utc', None)
-        delta_tdb_tt = map.pop('_delta_tdb_tt', None)
-
-        map['format'] = 'jd'
-        map['val'] = map.pop('jd1')
-        map['val2'] = map.pop('jd2')
+    def _construct_from_dict_base(self, map):
+        if 'jd1' in map and 'jd2' in map:
+            format = map.pop('format')
+            map['format'] = 'jd'
+            map['val'] = map.pop('jd1')
+            map['val2'] = map.pop('jd2')
+        else:
+            format = map['format']
+            map['val'] = map.pop('value')
 
         out = self._parent_cls(**map)
         out.format = format
+        return out
+
+    def _construct_from_dict(self, map):
+        delta_ut1_utc = map.pop('_delta_ut1_utc', None)
+        delta_tdb_tt = map.pop('_delta_tdb_tt', None)
+
+        out = self._construct_from_dict_base(map)
 
         if delta_ut1_utc is not None:
             out._delta_ut1_utc = delta_ut1_utc
@@ -135,20 +174,12 @@ class TimeInfo(MixinInfo):
 
         return out
 
+
 class TimeDeltaInfo(TimeInfo):
-    _represent_as_dict_attrs = ('jd1', 'jd2', 'format', 'scale')
+    _represent_as_dict_extra_attrs = ('format', 'scale')
 
     def _construct_from_dict(self, map):
-        format = map.pop('format')
-
-        map['format'] = 'jd'
-        map['val'] = map.pop('jd1')
-        map['val2'] = map.pop('jd2')
-
-        out = self._parent_cls(**map)
-        out.format = format
-
-        return out
+        return self._construct_from_dict_base(map)
 
 
 class Time(ShapedLikeNDArray):
@@ -294,8 +325,8 @@ class Time(ShapedLikeNDArray):
         if scale is not None:
             if not (isinstance(scale, six.string_types) and
                     scale.lower() in self.SCALES):
-                raise ScaleValueError("Scale {0} is not in the allowed scales "
-                                      "{1}".format(repr(scale),
+                raise ScaleValueError("Scale {0!r} is not in the allowed scales "
+                                      "{1}".format(scale,
                                                    sorted(self.SCALES)))
 
         # Parse / convert input values into internal jd1, jd2 based on format
@@ -329,8 +360,8 @@ class Time(ShapedLikeNDArray):
                 raise ValueError("No time format was given, and the input is "
                                  "not unique")
             else:
-                raise ValueError("Format {0} is not one of the allowed "
-                                 "formats {1}".format(repr(format),
+                raise ValueError("Format {0!r} is not one of the allowed "
+                                 "formats {1}".format(format,
                                                       sorted(self.FORMATS)))
         else:
             formats = [(format, self.FORMATS[format])]
@@ -431,8 +462,8 @@ class Time(ShapedLikeNDArray):
         if scale == self.scale:
             return
         if scale not in self.SCALES:
-            raise ValueError("Scale {0} is not in the allowed scales {1}"
-                             .format(repr(scale), sorted(self.SCALES)))
+            raise ValueError("Scale {0!r} is not in the allowed scales {1}"
+                             .format(scale, sorted(self.SCALES)))
 
         # Determine the chain of scale transformations to get from the current
         # scale to the new scale.  MULTI_HOPS contains a dict of all
@@ -714,7 +745,7 @@ class Time(ShapedLikeNDArray):
             if self.location is None:
                 raise ValueError('No longitude is given but the location for '
                                  'the Time object is not set.')
-            longitude = self.location.longitude
+            longitude = self.location.lon
         elif longitude == 'greenwich':
             longitude = Longitude(0., u.degree,
                                   wrap_angle=180.*u.degree)
@@ -1227,9 +1258,9 @@ class Time(ShapedLikeNDArray):
         return self._delta_ut1_utc
 
     def _set_delta_ut1_utc(self, val):
-        val = self._match_shape(val)
         if hasattr(val, 'to'):  # Matches Quantity but also TimeDelta.
             val = val.to(u.second).value
+        val = self._match_shape(val)
         self._delta_ut1_utc = val
         del self.cache
 
@@ -1268,19 +1299,19 @@ class Time(ShapedLikeNDArray):
             else:
                 location = self.location
             # Geodetic params needed for d_tdb_tt()
-            lon = location.longitude
+            lon = location.lon
             rxy = np.hypot(location.x, location.y)
             z = location.z
             self._delta_tdb_tt = erfa.dtdb(
-                jd1, jd2, ut, lon.to(u.radian).value,
-                rxy.to(u.km).value, z.to(u.km).value)
+                jd1, jd2, ut, lon.to_value(u.radian),
+                rxy.to_value(u.km), z.to_value(u.km))
 
         return self._delta_tdb_tt
 
     def _set_delta_tdb_tt(self, val):
-        val = self._match_shape(val)
         if hasattr(val, 'to'):  # Matches Quantity but also TimeDelta.
             val = val.to(u.second).value
+        val = self._match_shape(val)
         self._delta_tdb_tt = val
         del self.cache
 
@@ -1529,8 +1560,8 @@ class TimeDelta(Time):
         if scale == self.scale:
             return
         if scale not in self.SCALES:
-            raise ValueError("Scale {0} is not in the allowed scales {1}"
-                             .format(repr(scale), sorted(self.SCALES)))
+            raise ValueError("Scale {0!r} is not in the allowed scales {1}"
+                             .format(scale, sorted(self.SCALES)))
 
         # For TimeDelta, there can only be a change in scale factor,
         # which is written as time2 - time1 = scale_offset * time1
@@ -1707,6 +1738,7 @@ def _make_array(val, copy=False):
         Array version of ``val``.
     """
     val = np.array(val, copy=copy, subok=True)
+
     # Allow only float64, string or object arrays as input
     # (object is for datetime, maybe add more specific test later?)
     # This also ensures the right byteorder for float64 (closes #2942).

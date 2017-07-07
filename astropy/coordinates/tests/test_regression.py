@@ -9,17 +9,20 @@ place to live
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+import pytest
 import numpy as np
 
 from ... import units as u
 from .. import (AltAz, EarthLocation, SkyCoord, get_sun, ICRS, CIRS, ITRS,
                 GeocentricTrueEcliptic, Longitude, Latitude, GCRS, HCRS,
-                get_moon, FK4, FK4NoETerms)
+                get_moon, FK4, FK4NoETerms, BaseCoordinateFrame,
+                QuantityAttribute, SphericalRepresentation,
+                UnitSphericalRepresentation, CartesianRepresentation)
 from ..sites import get_builtin_sites
 from ...time import Time
 from ...utils import iers
 
-from ...tests.helper import pytest, assert_quantity_allclose, catch_warnings, quantity_allclose
+from ...tests.helper import assert_quantity_allclose, catch_warnings, quantity_allclose
 from .test_matching import HAS_SCIPY, OLDER_SCIPY
 
 
@@ -33,7 +36,7 @@ def test_regression_5085():
     """
     times = Time(["2015-08-28 03:30", "2015-09-05 10:30", "2015-09-15 18:35"])
     latitudes = Latitude([3.9807075, -5.00733806, 1.69539491]*u.deg)
-    longitudes = Longitude([311.79678613,  72.86626741, 199.58698226]*u.deg)
+    longitudes = Longitude([311.79678613, 72.86626741, 199.58698226]*u.deg)
     distances = u.Quantity([0.00243266, 0.0025424, 0.00271296]*u.au)
     coo = GeocentricTrueEcliptic(lat=latitudes,
                                  lon=longitudes,
@@ -348,3 +351,119 @@ def test_regression_simple_5133():
     # az is more-or-less undefined for straight up or down
     assert_quantity_allclose(aa.alt, [90, -90]*u.deg, rtol=1e-5)
     assert_quantity_allclose(aa.distance, [90, 10]*u.km)
+
+
+def test_regression_5743():
+    sc = SkyCoord([5, 10], [20, 30], unit=u.deg,
+                  obstime=['2017-01-01T00:00', '2017-01-01T00:10'])
+    assert sc[0].obstime.shape == tuple()
+
+
+def test_regression_5889_5890():
+    # ensure we can represent all Representations and transform to ND frames
+    greenwich = EarthLocation(
+        *u.Quantity([3980608.90246817, -102.47522911, 4966861.27310067],
+        unit=u.m))
+    times = Time("2017-03-20T12:00:00") + np.linspace(-2, 2, 3)*u.hour
+    moon = get_moon(times, location=greenwich)
+    targets = SkyCoord([350.7*u.deg, 260.7*u.deg], [18.4*u.deg, 22.4*u.deg])
+    targs2d = targets[:, np.newaxis]
+    targs2d.transform_to(moon)
+
+
+def test_regression_6236():
+    # sunpy changes its representation upon initialisation of a frame,
+    # including via `realize_frame`. Ensure this works.
+    class MyFrame(BaseCoordinateFrame):
+        default_representation = CartesianRepresentation
+        my_attr = QuantityAttribute(default=0, unit=u.m)
+
+    class MySpecialFrame(MyFrame):
+        def __init__(self, *args, **kwargs):
+            _rep_kwarg = kwargs.get('representation', None)
+            super(MyFrame, self).__init__(*args, **kwargs)
+            if not _rep_kwarg:
+                self.representation = self.default_representation
+                self._data = self.data.represent_as(self.representation)
+
+    rep1 = UnitSphericalRepresentation([0., 1]*u.deg, [2., 3.]*u.deg)
+    rep2 = SphericalRepresentation([10., 11]*u.deg, [12., 13.]*u.deg,
+                                   [14., 15.]*u.kpc)
+    mf1 = MyFrame(rep1, my_attr=1.*u.km)
+    mf2 = mf1.realize_frame(rep2)
+    # Normally, data is stored as is, but the representation gets set to a
+    # default, even if a different representation instance was passed in.
+    # realize_frame should do the same. Just in case, check attrs are passed.
+    assert mf1.data is rep1
+    assert mf2.data is rep2
+    assert mf1.representation is CartesianRepresentation
+    assert mf2.representation is CartesianRepresentation
+    assert mf2.my_attr == mf1.my_attr
+    # It should be independent of whether I set the reprensentation explicitly
+    mf3 = MyFrame(rep1, my_attr=1.*u.km, representation='unitspherical')
+    mf4 = mf3.realize_frame(rep2)
+    assert mf3.data is rep1
+    assert mf4.data is rep2
+    assert mf3.representation is UnitSphericalRepresentation
+    assert mf4.representation is CartesianRepresentation
+    assert mf4.my_attr == mf3.my_attr
+    # This should be enough to help sunpy, but just to be sure, a test
+    # even closer to what is done there, i.e., transform the representation.
+    msf1 = MySpecialFrame(rep1, my_attr=1.*u.km)
+    msf2 = msf1.realize_frame(rep2)
+    assert msf1.data is not rep1  # Gets transformed to Cartesian.
+    assert msf2.data is not rep2
+    assert type(msf1.data) is CartesianRepresentation
+    assert type(msf2.data) is CartesianRepresentation
+    assert msf1.representation is CartesianRepresentation
+    assert msf2.representation is CartesianRepresentation
+    assert msf2.my_attr == msf1.my_attr
+    # And finally a test where the input is not transformed.
+    msf3 = MySpecialFrame(rep1, my_attr=1.*u.km,
+                          representation='unitspherical')
+    msf4 = msf3.realize_frame(rep2)
+    assert msf3.data is rep1
+    assert msf4.data is not rep2
+    assert msf3.representation is UnitSphericalRepresentation
+    assert msf4.representation is CartesianRepresentation
+    assert msf4.my_attr == msf3.my_attr
+
+
+@pytest.mark.skipif(not HAS_SCIPY, reason='No Scipy')
+@pytest.mark.skipif(OLDER_SCIPY, reason='Scipy too old')
+def test_regression_6347():
+    sc1 = SkyCoord([1, 2]*u.deg, [3, 4]*u.deg)
+    sc2 = SkyCoord([1.1, 2.1]*u.deg, [3.1, 4.1]*u.deg)
+    sc0 = sc1[:0]
+
+    idx1_10, idx2_10, d2d_10, d3d_10 = sc1.search_around_sky(sc2, 10*u.arcmin)
+    idx1_1, idx2_1, d2d_1, d3d_1 = sc1.search_around_sky(sc2, 1*u.arcmin)
+    idx1_0, idx2_0, d2d_0, d3d_0 = sc0.search_around_sky(sc2, 10*u.arcmin)
+
+    assert len(d2d_10) == 2
+
+    assert len(d2d_0) == 0
+    assert type(d2d_0) is type(d2d_10)
+
+    assert len(d2d_1) == 0
+    assert type(d2d_1) is type(d2d_10)
+
+
+@pytest.mark.skipif(not HAS_SCIPY, reason='No Scipy')
+@pytest.mark.skipif(OLDER_SCIPY, reason='Scipy too old')
+def test_regression_6347_3d():
+    sc1 = SkyCoord([1, 2]*u.deg, [3, 4]*u.deg, [5, 6]*u.kpc)
+    sc2 = SkyCoord([1, 2]*u.deg, [3, 4]*u.deg, [5.1, 6.1]*u.kpc)
+    sc0 = sc1[:0]
+
+    idx1_10, idx2_10, d2d_10, d3d_10 = sc1.search_around_3d(sc2, 500*u.pc)
+    idx1_1, idx2_1, d2d_1, d3d_1 = sc1.search_around_3d(sc2, 50*u.pc)
+    idx1_0, idx2_0, d2d_0, d3d_0 = sc0.search_around_3d(sc2, 500*u.pc)
+
+    assert len(d2d_10) > 0
+
+    assert len(d2d_0) == 0
+    assert type(d2d_0) is type(d2d_10)
+
+    assert len(d2d_1) == 0
+    assert type(d2d_1) is type(d2d_10)

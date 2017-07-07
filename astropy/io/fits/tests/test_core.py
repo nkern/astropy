@@ -9,6 +9,7 @@ import os
 import warnings
 import zipfile
 
+import pytest
 import numpy as np
 
 try:
@@ -25,7 +26,7 @@ from ..file import _File, GZIP_MAGIC
 
 from ....extern.six.moves import range, zip
 from ....io import fits
-from ....tests.helper import pytest, raises, catch_warnings, ignore_warnings
+from ....tests.helper import raises, catch_warnings, ignore_warnings
 from ....utils.data import get_pkg_data_filename
 from ....utils import data
 
@@ -91,7 +92,6 @@ class TestCore(FitsTestCase):
         hdulist2 = fits.open(self.data('tdim.fits'))
 
         assert FITSDiff(hdulist2, hdulist).identical is True
-
 
     def test_add_del_columns(self):
         p = fits.ColDefs([])
@@ -426,7 +426,7 @@ class TestCore(FitsTestCase):
         hdu.header['SIMPLE'] = False
         hdu.writeto(self.temp('test.fits'))
 
-        info = [(0, '', 'NonstandardHDU', 5, (), '', '')]
+        info = [(0, '', 1, 'NonstandardHDU', 5, (), '', '')]
         with fits.open(self.temp('test.fits')) as hdul:
             assert hdul.info(output=False) == info
             # NonstandardHDUs just treat the data as an unspecified array of
@@ -615,7 +615,7 @@ class TestFileFunctions(FitsTestCase):
         # still how the original test case looked
         # Note: with statement not supported on GzipFile in older Python
         # versions
-        fileobj =  gzip.GzipFile(self.temp('test.fits.gz'), 'ab+')
+        fileobj = gzip.GzipFile(self.temp('test.fits.gz'), 'ab+')
         h = fits.PrimaryHDU()
         try:
             h.writeto(fileobj)
@@ -944,7 +944,6 @@ class TestFileFunctions(FitsTestCase):
             def tell(self):
                 return self._foobar.tell()
 
-
         with open(self.data('test0.fits'), 'rb') as f:
             fileobj = MyFileLike(f)
 
@@ -1014,12 +1013,12 @@ class TestFileFunctions(FitsTestCase):
         with fits.open(self.temp(filename)) as hdul:
             assert np.all(hdul[0].data == hdu.data)
 
-
     def test_writeto_full_disk(self, monkeypatch):
         """
         Test that it gives a readable error when trying to write an hdulist
         to a full disk.
         """
+
         def _writeto(self, array):
             raise OSError("Fake error raised when writing file.")
 

@@ -6,15 +6,14 @@ This module tests fitting and model evaluation with various inputs
 from __future__ import (absolute_import, unicode_literals, division,
                         print_function)
 
+import pytest
 import numpy as np
-
 from numpy.testing.utils import assert_allclose
 
 from .. import models
 from .. import fitting
 from ..core import Model, FittableModel, Fittable1DModel
 from ..parameters import Parameter
-from ...tests.helper import pytest
 from ...extern.six.moves import range
 
 try:
@@ -790,7 +789,6 @@ class TestSingleInputDoubleOutputSingleModel(object):
                               [111.04, 222.05, 333.06]],
                              [[111.07, 222.08, 333.09],
                               [111.10, 222.11, 333.12]]])
-
 
         y2, z2 = t([[[[10]]], [[[20]]], [[[30]]]])
         assert np.shape(y2) == np.shape(z2) == (3, 2, 2, 3)

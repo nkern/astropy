@@ -1,6 +1,7 @@
 import os
 import warnings
 
+import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
@@ -10,8 +11,8 @@ from ... import fits
 
 from .... import units as u
 from ....extern.six.moves import range, zip
-from ....table import Table
-from ....tests.helper import pytest, catch_warnings
+from ....table import Table, QTable
+from ....tests.helper import catch_warnings
 from ....units.format.fits import UnitScaleError
 
 DATA = os.path.join(os.path.dirname(__file__), 'data')
@@ -60,7 +61,7 @@ class TestSingleTable(object):
         t1.meta['A'] = 1
         t1.meta['B'] = 2.3
         t1.meta['C'] = 'spam'
-        t1.meta['COMMENT'] = ['this', 'is', 'a', 'long', 'comment']
+        t1.meta['comments'] = ['this', 'is', 'a', 'long', 'comment']
         t1.meta['HISTORY'] = ['first', 'second', 'third']
         t1.write(filename, overwrite=True)
         t2 = Table.read(filename)
@@ -92,13 +93,14 @@ class TestSingleTable(object):
         t2 = Table.read(filename)
         assert equal_data(t1, t2)
 
-    def test_with_units(self, tmpdir):
+    @pytest.mark.parametrize('table_type', (Table, QTable))
+    def test_with_units(self, table_type, tmpdir):
         filename = str(tmpdir.join('test_with_units.fits'))
-        t1 = Table(self.data)
+        t1 = table_type(self.data)
         t1['a'].unit = u.m
         t1['c'].unit = u.km / u.s
         t1.write(filename, overwrite=True)
-        t2 = Table.read(filename)
+        t2 = table_type.read(filename)
         assert equal_data(t1, t2)
         assert t2['a'].unit == u.m
         assert t2['c'].unit == u.km / u.s
@@ -255,7 +257,7 @@ def test_masking_regression_1795():
     assert np.all(t['c2'].mask == np.array([False, False]))
     assert np.all(t['c3'].mask == np.array([False, False]))
     assert np.all(t['c4'].mask == np.array([False, False]))
-    assert np.all(t['c1'].data == np.array([1,2]))
+    assert np.all(t['c1'].data == np.array([1, 2]))
     assert np.all(t['c2'].data == np.array(['abc', 'xy ']))
     assert_allclose(t['c3'].data, np.array([3.70000007153, 6.6999997139]))
     assert np.all(t['c4'].data == np.array([False, True]))
@@ -266,10 +268,10 @@ def test_scale_error():
     b = [2.0, 5.0, 8.2]
     c = ['x', 'y', 'z']
     t = Table([a, b, c], names=('a', 'b', 'c'), meta={'name': 'first table'})
-    t['a'].unit='1.2'
+    t['a'].unit = '1.2'
     with pytest.raises(UnitScaleError) as exc:
-        t.write('t.fits',format='fits', overwrite=True)
-    assert exc.value.args[0]=="The column 'a' could not be stored in FITS format because it has a scale '(1.2)' that is not recognized by the FITS standard. Either scale the data or change the units."
+        t.write('t.fits', format='fits', overwrite=True)
+    assert exc.value.args[0] == "The column 'a' could not be stored in FITS format because it has a scale '(1.2)' that is not recognized by the FITS standard. Either scale the data or change the units."
 
 
 def test_bool_column(tmpdir):
@@ -327,3 +329,23 @@ def test_unit_warnings_read_write(tmpdir):
     with catch_warnings() as l:
         Table.read(filename, hdu=1)
     assert len(l) == 0
+
+
+def test_convert_comment_convention(tmpdir):
+    """
+    Regression test for https://github.com/astropy/astropy/issues/6079
+    """
+    filename = os.path.join(DATA, 'stddata.fits')
+    t = Table.read(filename)
+
+    assert t.meta['comments'] == [
+        '',
+        ' *** End of mandatory fields ***',
+        '',
+        '',
+        ' *** Column names ***',
+        '',
+        '',
+        ' *** Column formats ***',
+        ''
+    ]

@@ -247,7 +247,6 @@ class Header(object):
             if not indices:
                 del self._rvkc_indices[card.rawkeyword]
 
-
         # We also need to update all other indices
         self._updateindices(idx, increment=False)
         self._modified = True
@@ -640,7 +639,7 @@ class Header(object):
             s += ' ' * _pad_length(len(s))
         return s
 
-    @deprecated_renamed_argument('clobber', 'overwrite', '1.3', pending=True)
+    @deprecated_renamed_argument('clobber', 'overwrite', '2.0')
     def tofile(self, fileobj, sep='', endcard=True, padding=True,
                overwrite=False):
         r"""
@@ -722,7 +721,7 @@ class Header(object):
 
         return cls.fromfile(fileobj, sep='\n', endcard=endcard, padding=False)
 
-    @deprecated_renamed_argument('clobber', 'overwrite', '1.3', pending=True)
+    @deprecated_renamed_argument('clobber', 'overwrite', '2.0')
     def totextfile(self, fileobj, endcard=False, overwrite=False):
         """
         Write the header as text to a file or a file-like object.
@@ -1494,7 +1493,6 @@ class Header(object):
         elif not ignore_missing:
             raise KeyError("Keyword '{}' not found.".format(keyword))
 
-
     def rename_keyword(self, oldkeyword, newkeyword, force=False):
         """
         Rename a card's keyword in the header.
@@ -1694,7 +1692,7 @@ class Header(object):
         """
 
         if idx < 0:
-            idx += len(self._cards) - 1
+            idx += len(self._cards)
 
         keyword = self._cards[idx].keyword
         keyword = Card.normalize_keyword(keyword)

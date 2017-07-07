@@ -29,7 +29,6 @@ except ImportError:
         s = s.replace(">", "&gt;")
         return s
 
-
     def xml_escape(s):
         """
         Escapes &, ', ", < and > in an XML attribute value.
@@ -168,6 +167,9 @@ class XMLWriter:
         Any additional keyword arguments will be passed directly to the
         ``clean`` function.
 
+        Finally, use ``method='none'`` to disable any sanitization. This should
+        be used sparingly.
+
         Example::
 
           w = writer.XMLWriter(ListWriter(lines))
@@ -179,8 +181,8 @@ class XMLWriter:
         Parameters
         ----------
         method : str
-            Cleaning method.  Allowed values are "escape_xml" and
-            "bleach_clean".
+            Cleaning method.  Allowed values are "escape_xml",
+            "bleach_clean", and "none".
 
         **clean_kwargs : keyword args
             Additional keyword args that are passed to the
@@ -196,8 +198,10 @@ class XMLWriter:
             else:
                 raise ValueError('bleach package is required when HTML escaping is disabled.\n'
                                  'Use "pip install bleach".')
+        elif method == "none":
+            self.xml_escape_cdata = lambda x: x
         elif method != 'escape_xml':
-            raise ValueError('allowed values of method are "escape_xml" and "bleach_clean"')
+            raise ValueError('allowed values of method are "escape_xml", "bleach_clean", and "none"')
 
         yield
 
@@ -259,11 +263,14 @@ class XMLWriter:
             If omitted, the current element is closed.
         """
         if tag:
-            assert self._tags, "unbalanced end({})".format(tag)
-            assert tag == self._tags[-1],\
-                   "expected end({}), got {}".format(self._tags[-1], tag)
+            if not self._tags:
+                raise ValueError("unbalanced end({})".format(tag))
+            if tag != self._tags[-1]:
+                raise ValueError("expected end({}), got {}".format(
+                        self._tags[-1], tag))
         else:
-            assert self._tags, "unbalanced end()"
+            if not self._tags:
+                raise ValueError("unbalanced end()")
         tag = self._tags.pop()
         if self._data:
             self._flush(indent, wrap)

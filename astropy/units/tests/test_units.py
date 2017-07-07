@@ -12,12 +12,13 @@ from __future__ import (absolute_import, unicode_literals, division,
 
 from fractions import Fraction
 
+import pytest
 import numpy as np
 from numpy.testing.utils import assert_allclose
 
 from ...extern import six
 from ...extern.six.moves import range, cPickle as pickle
-from ...tests.helper import pytest, raises, catch_warnings
+from ...tests.helper import raises, catch_warnings
 
 from ... import units as u
 from ... import constants as c
@@ -347,6 +348,7 @@ for val in u.cgs.__dict__.values():
             val != u.cgs.deg_C):
         COMPOSE_CGS_TO_SI.add(val)
 
+
 @pytest.mark.parametrize('unit', sorted(COMPOSE_CGS_TO_SI, key=_unit_as_str),
                          ids=_unit_as_str)
 def test_compose_cgs_to_si(unit):
@@ -365,6 +367,7 @@ for val in u.si.__dict__.values():
             val != u.si.deg_C):
         COMPOSE_SI_TO_CGS.add(val)
 
+
 @pytest.mark.parametrize('unit', sorted(COMPOSE_SI_TO_CGS, key=_unit_as_str), ids=_unit_as_str)
 def test_compose_si_to_cgs(unit):
 
@@ -379,7 +382,6 @@ def test_compose_si_to_cgs(unit):
     else:
         assert [x.is_equivalent(unit) for x in cgs]
         assert cgs[0] == unit.cgs
-
 
 
 def test_to_cgs():
@@ -471,7 +473,7 @@ def test_endian_independence():
     for endian in ['<', '>']:
         for ntype in ['i', 'f']:
             for byte in ['4', '8']:
-                x = np.array([1,2,3], dtype=(endian + ntype + byte))
+                x = np.array([1, 2, 3], dtype=(endian + ntype + byte))
                 u.m.to(u.cm, x)
 
 
@@ -496,6 +498,7 @@ def test_no_duplicates_in_names():
     assert u.ct.long_names == ['count']
     assert set(u.ph.names) == set(u.ph.short_names) | set(u.ph.long_names)
 
+
 def test_pickling():
     p = pickle.dumps(u.m)
     other = pickle.loads(p)
@@ -503,11 +506,32 @@ def test_pickling():
     assert other is u.m
 
     new_unit = u.IrreducibleUnit(['foo'], format={'baz': 'bar'})
+    # This is local, so the unit should not be registered.
+    assert 'foo' not in u.get_current_unit_registry().registry
+
+    # Test pickling of this unregistered unit.
+    p = pickle.dumps(new_unit)
+    new_unit_copy = pickle.loads(p)
+    assert new_unit_copy.names == ['foo']
+    assert new_unit_copy.get_format_name('baz') == 'bar'
+    # It should still not be registered.
+    assert 'foo' not in u.get_current_unit_registry().registry
+
+    # Now try the same with a registered unit.
     with u.add_enabled_units([new_unit]):
         p = pickle.dumps(new_unit)
+        assert 'foo' in u.get_current_unit_registry().registry
+
+    # Check that a registered unit can be loaded and that it gets re-enabled.
+    with u.add_enabled_units([]):
+        assert 'foo' not in u.get_current_unit_registry().registry
         new_unit_copy = pickle.loads(p)
         assert new_unit_copy.names == ['foo']
         assert new_unit_copy.get_format_name('baz') == 'bar'
+        assert 'foo' in u.get_current_unit_registry().registry
+
+    # And just to be sure, that it gets removed outside of the context.
+    assert 'foo' not in u.get_current_unit_registry().registry
 
 
 def test_pickle_unrecognized_unit():
@@ -760,6 +784,6 @@ def test_unit_summary_prefixes():
         elif unit.name == 'barn':
             assert prefixes
         elif unit.name == 'cycle':
-            assert not prefixes
+            assert prefixes == 'No'
         elif unit.name == 'vox':
-            assert prefixes
+            assert prefixes == 'Yes'

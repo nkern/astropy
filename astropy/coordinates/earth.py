@@ -2,24 +2,22 @@
 from __future__ import absolute_import, division, print_function
 
 from warnings import warn
+import collections
 import socket
 import json
 
 import numpy as np
 from .. import units as u
-from ..units.quantity import QuantityInfo
+from ..units.quantity import QuantityInfoBase
 from ..extern import six
 from ..extern.six.moves import urllib
 from ..utils.exceptions import AstropyUserWarning
 from ..utils.compat.numpycompat import NUMPY_LT_1_12
 from ..utils.compat.numpy import broadcast_to
 from .angles import Longitude, Latitude
-from .builtin_frames import ITRS, GCRS
 from .representation import CartesianRepresentation
 from .errors import UnknownSiteException
-from ..utils import data
-
-from .name_resolve import NameResolveError
+from ..utils import data, deprecated
 
 try:
     # Not guaranteed available at setup time.
@@ -29,6 +27,8 @@ except ImportError:
         raise
 
 __all__ = ['EarthLocation']
+
+GeodeticLocation = collections.namedtuple('GeodeticLocation', ['lon', 'lat', 'height'])
 
 # Available ellipsoids (defined in erfam.h, with numbers exposed in erfa).
 ELLIPSOIDS = ('WGS84', 'GRS80', 'WGS72')
@@ -50,7 +50,10 @@ def _check_ellipsoid(ellipsoid=None, default='WGS84'):
                          .format(ellipsoid, ELLIPSOIDS))
     return ellipsoid
 
+
 def _get_json_result(url, err_str):
+    # need to do this here to prevent a series of complicated circular imports
+    from .name_resolve import NameResolveError
     try:
         # Retrieve JSON response from Google maps API
         resp = urllib.request.urlopen(url, timeout=data.conf.remote_timeout)
@@ -81,7 +84,7 @@ def _get_json_result(url, err_str):
     return results
 
 
-class EarthLocationInfo(QuantityInfo):
+class EarthLocationInfo(QuantityInfoBase):
     """
     Container for meta information like name, description, format.  This is
     required when the object is used as a mixin column within a table, but can
@@ -95,6 +98,54 @@ class EarthLocationInfo(QuantityInfo):
         ellipsoid = map.pop('ellipsoid')
         out = self._parent_cls(**map)
         out.ellipsoid = ellipsoid
+        return out
+
+    def new_like(self, cols, length, metadata_conflicts='warn', name=None):
+        """
+        Return a new EarthLocation instance which is consistent with the
+        input ``cols`` and has ``length`` rows.
+
+        This is intended for creating an empty column object whose elements can
+        be set in-place for table operations like join or vstack.
+
+        Parameters
+        ----------
+        cols : list
+            List of input columns
+        length : int
+            Length of the output column object
+        metadata_conflicts : str ('warn'|'error'|'silent')
+            How to handle metadata conflicts
+        name : str
+            Output column name
+
+        Returns
+        -------
+        col : EarthLocation (or subclass)
+            Empty instance of this class consistent with ``cols``
+        """
+        # Very similar to QuantityInfo.new_like, but the creation of the
+        # map is different enough that this needs its own rouinte.
+        # Get merged info attributes shape, dtype, format, description.
+        attrs = self.merge_cols_attributes(cols, metadata_conflicts, name,
+                                           ('meta', 'format', 'description'))
+        # The above raises an error if the dtypes do not match, but returns
+        # just the string representation, which is not useful, so remove.
+        attrs.pop('dtype')
+        # Make empty EarthLocation using the dtype and unit of the last column.
+        # Use zeros so we do not get problems for possible conversion to
+        # geodetic coordinates.
+        shape = (length,) + attrs.pop('shape')
+        data = u.Quantity(np.zeros(shape=shape, dtype=cols[0].dtype),
+                          unit=cols[0].unit, copy=False)
+        # Get arguments needed to reconstruct class
+        map = {key: (data[key] if key in 'xyz' else getattr(cols[-1], key))
+               for key in self._represent_as_dict_attrs}
+        out = self._construct_from_dict(map)
+        # Set remaining info attributes
+        for attr, value in attrs.items():
+            setattr(out.info, attr, value)
+
         return out
 
 
@@ -131,6 +182,10 @@ class EarthLocation(u.Quantity):
     info = EarthLocationInfo()
 
     def __new__(cls, *args, **kwargs):
+        # TODO: needs copy argument and better dealing with inputs.
+        if (len(args) == 1 and len(kwargs) == 0 and
+                isinstance(args[0], EarthLocation)):
+            return args[0].copy()
         try:
             self = cls.from_geocentric(*args, **kwargs)
         except (u.UnitsError, TypeError) as exc_geocentric:
@@ -233,9 +288,9 @@ class EarthLocation(u.Quantity):
             height = u.Quantity(height, u.m, copy=False)
         # convert to float in units required for erfa routine, and ensure
         # all broadcast to same shape, and are at least 1-dimensional.
-        _lon, _lat, _height = np.broadcast_arrays(lon.to(u.radian).value,
-                                                  lat.to(u.radian).value,
-                                                  height.to(u.m).value)
+        _lon, _lat, _height = np.broadcast_arrays(lon.to_value(u.radian),
+                                                  lat.to_value(u.radian),
+                                                  height.to_value(u.m))
         # get geocentric coordinates. Have to give one-dimensional array.
         xyz = erfa.gd2gc(getattr(erfa, ellipsoid), _lon.ravel(),
                                  _lat.ravel(), _height.ravel())
@@ -476,19 +531,32 @@ class EarthLocation(u.Quantity):
         ellipsoid = _check_ellipsoid(ellipsoid, default=self.ellipsoid)
         self_array = self.to(u.meter).view(self._array_dtype, np.ndarray)
         lon, lat, height = erfa.gc2gd(getattr(erfa, ellipsoid), self_array)
-        return (Longitude(lon * u.radian, u.degree,
-                          wrap_angle=180.*u.degree),
-                Latitude(lat * u.radian, u.degree),
-                u.Quantity(height * u.meter, self.unit))
+        return GeodeticLocation(
+            Longitude(lon * u.radian, u.degree,
+                      wrap_angle=180.*u.degree, copy=False),
+            Latitude(lat * u.radian, u.degree, copy=False),
+            u.Quantity(height * u.meter, self.unit, copy=False))
 
     @property
+    @deprecated('2.0', alternative='`lon`', obj_type='property')
     def longitude(self):
         """Longitude of the location, for the default ellipsoid."""
         return self.geodetic[0]
 
     @property
+    def lon(self):
+        """Longitude of the location, for the default ellipsoid."""
+        return self.geodetic[0]
+
+    @property
+    @deprecated('2.0', alternative='`lat`', obj_type='property')
     def latitude(self):
         """Latitude of the location, for the default ellipsoid."""
+        return self.geodetic[1]
+
+    @property
+    def lat(self):
+        """Longitude of the location, for the default ellipsoid."""
         return self.geodetic[1]
 
     @property
@@ -527,6 +595,8 @@ class EarthLocation(u.Quantity):
         if obstime and self.size == 1 and obstime.size > 1:
             self = broadcast_to(self, obstime.shape, subok=True)
 
+        # do this here to prevent a series of complicated circular imports
+        from .builtin_frames import ITRS
         return ITRS(x=self.x, y=self.y, z=self.z, obstime=obstime)
 
     itrs = property(get_itrs, doc="""An `~astropy.coordinates.ITRS` object  with
@@ -550,6 +620,9 @@ class EarthLocation(u.Quantity):
         obsgeovel : `~astropy.coordinates.CartesianRepresentation`
             The GCRS velocity of the object
         """
+        # do this here to prevent a series of complicated circular imports
+        from .builtin_frames import GCRS
+
         itrs = self.get_itrs(obstime)
         geocentric_frame = GCRS(obstime=obstime)
         # GCRS position
@@ -593,17 +666,21 @@ class EarthLocation(u.Quantity):
         else:
             return super(EarthLocation, self).__len__()
 
-    def to(self, unit, equivalencies=[]):
-        array_view = self.view(self._array_dtype, u.Quantity)
-        converted = array_view.to(unit, equivalencies)
-        return self._new_view(converted.view(self.dtype).reshape(self.shape),
-                              unit)
-    to.__doc__ = u.Quantity.to.__doc__
+    def _to_value(self, unit, equivalencies=[]):
+        """Helper method for to and to_value."""
+        # Conversion to another unit in both ``to`` and ``to_value`` goes
+        # via this routine. To make the regular quantity routines work, we
+        # temporarily turn the structured array into a regular one.
+        array_view = self.view(self._array_dtype, np.ndarray)
+        if equivalencies == []:
+            equivalencies = self._equivalencies
+        new_array = self.unit.to(unit, array_view, equivalencies=equivalencies)
+        return new_array.view(self.dtype).reshape(self.shape)
 
     if NUMPY_LT_1_12:
         def __repr__(self):
             # Use the numpy >=1.12 way to format structured arrays.
-            from  .representation import _array2string
+            from .representation import _array2string
             prefixstr = '<' + self.__class__.__name__ + ' '
             arrstr = _array2string(self.view(np.ndarray), prefix=prefixstr)
             return '{0}{1}{2:s}>'.format(prefixstr, arrstr, self._unitstr)

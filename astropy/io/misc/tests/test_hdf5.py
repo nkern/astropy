@@ -2,10 +2,10 @@
 
 from __future__ import print_function
 
-
+import pytest
 import numpy as np
 
-from ....tests.helper import pytest, catch_warnings
+from ....tests.helper import catch_warnings
 from ....table import Table, Column
 
 try:
@@ -436,6 +436,7 @@ def test_skip_meta(tmpdir):
     assert len(w) == 1
     assert str(w[0].message).startswith(
         "Attribute `f` of type {0} cannot be written to HDF5 files - skipping".format(type(t1.meta['f'])))
+
 
 @pytest.mark.skipif('not HAS_H5PY')
 def test_read_h5py_objects(tmpdir):

@@ -12,7 +12,7 @@ from ..verify import VerifyWarning
 
 from ....extern.six import string_types
 from ....extern.six.moves import range, zip
-from ....utils import isiterable, lazyproperty, classproperty, deprecated
+from ....utils import isiterable, lazyproperty
 
 
 class _ImageBaseHDU(_ValidHDU):
@@ -73,17 +73,17 @@ class _ImageBaseHDU(_ValidHDU):
                 c0 = ('SIMPLE', True, self.standard_keyword_comments['SIMPLE'])
             cards = [
                 c0,
-                ('BITPIX',    8, self.standard_keyword_comments['BITPIX']),
-                ('NAXIS',     0, self.standard_keyword_comments['NAXIS'])]
+                ('BITPIX', 8, self.standard_keyword_comments['BITPIX']),
+                ('NAXIS', 0, self.standard_keyword_comments['NAXIS'])]
 
             if isinstance(self, GroupsHDU):
                 cards.append(('GROUPS', True,
                              self.standard_keyword_comments['GROUPS']))
 
             if isinstance(self, (ExtensionHDU, GroupsHDU)):
-                cards.append(('PCOUNT',    0,
+                cards.append(('PCOUNT', 0,
                               self.standard_keyword_comments['PCOUNT']))
-                cards.append(('GCOUNT',    1,
+                cards.append(('GCOUNT', 1,
                               self.standard_keyword_comments['GCOUNT']))
 
             if header is not None:
@@ -302,7 +302,6 @@ class _ImageBaseHDU(_ValidHDU):
         self._orig_bitpix = self._bitpix
         self._orig_bscale = self._bscale
         self._orig_bzero = self._bzero
-
 
         # returning the data signals to lazyproperty that we've already handled
         # setting self.__dict__['data']
@@ -630,12 +629,18 @@ class _ImageBaseHDU(_ValidHDU):
                 should_swap = (byteorder in swap_types)
 
             if not fileobj.simulateonly:
+
                 if should_swap:
-                    output.byteswap(True)
-                    try:
-                        fileobj.writearray(output)
-                    finally:
+                    if output.flags.writeable:
                         output.byteswap(True)
+                        try:
+                            fileobj.writearray(output)
+                        finally:
+                            output.byteswap(True)
+                    else:
+                        # For read-only arrays, there is no way around making
+                        # a byteswapped copy of the data.
+                        fileobj.writearray(output.byteswap(False))
                 else:
                     fileobj.writearray(output)
 
@@ -792,7 +797,7 @@ class _ImageBaseHDU(_ValidHDU):
         # Display shape in FITS-order
         shape = tuple(reversed(self.shape))
 
-        return (self.name, class_name, len(self._header), shape, format, '')
+        return (self.name, self.ver, class_name, len(self._header), shape, format, '')
 
     def _calculate_datasum(self, blocking):
         """
@@ -800,6 +805,7 @@ class _ImageBaseHDU(_ValidHDU):
         """
 
         if self._has_data:
+
             # We have the data to be used.
             d = self.data
 
@@ -812,9 +818,16 @@ class _ImageBaseHDU(_ValidHDU):
             # Check the byte order of the data.  If it is little endian we
             # must swap it before calculating the datasum.
             if d.dtype.str[0] != '>':
-                byteswapped = True
-                d = d.byteswap(True)
-                d.dtype = d.dtype.newbyteorder('>')
+                if d.flags.writeable:
+                    byteswapped = True
+                    d = d.byteswap(True)
+                    d.dtype = d.dtype.newbyteorder('>')
+                else:
+                    # If the data is not writeable, we just make a byteswapped
+                    # copy and don't bother changing it back after
+                    d = d.byteswap(False)
+                    d.dtype = d.dtype.newbyteorder('>')
+                    byteswapped = False
             else:
                 byteswapped = False
 
@@ -835,18 +848,6 @@ class _ImageBaseHDU(_ValidHDU):
             # all.  This can also be handled in a generic manner.
             return super(_ImageBaseHDU, self)._calculate_datasum(
                 blocking=blocking)
-
-    @classproperty
-    @deprecated('1.1.0', alternative='the module level constant BITPIX2DTYPE',
-                obj_type='class attribute')
-    def NumCode(cls):
-        return BITPIX2DTYPE
-
-    @classproperty
-    @deprecated('1.1.0', alternative='the module level constant DTYPE2BITPIX',
-                obj_type='class attribute')
-    def ImgCode(cls):
-        return DTYPE2BITPIX
 
 
 class Section(object):
@@ -1007,8 +1008,10 @@ class PrimaryHDU(_ImageBaseHDU):
     @classmethod
     def match_header(cls, header):
         card = header.cards[0]
+        # Due to problems discussed in #5808, we cannot assume the 'GROUPS'
+        # keyword to be True/False, have to check the value
         return (card.keyword == 'SIMPLE' and
-                ('GROUPS' not in header or not header['GROUPS']) and
+                ('GROUPS' not in header or header['GROUPS'] != True) and  # noqa
                 card.value)
 
     def update_header(self):

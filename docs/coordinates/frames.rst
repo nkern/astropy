@@ -1,7 +1,7 @@
 .. include:: references.txt
 
 Using and Designing Coordinate Frames
--------------------------------------
+*************************************
 
 In `astropy.coordinates`, as outlined in the
 :ref:`astropy-coordinates-overview`, subclasses of |baseframe| ("frame
@@ -18,7 +18,7 @@ Using Frame Objects
 ===================
 
 Frames without Data
-^^^^^^^^^^^^^^^^^^^
+-------------------
 
 Frame objects have two distinct (but related) uses.  The first is
 storing the information needed to uniquely define a frame (e.g.,
@@ -56,7 +56,7 @@ into an `~astropy.time.Time` object with UTC scale (see
 
 
 Frames with Data
-^^^^^^^^^^^^^^^^
+----------------
 
 The second use for frame objects is to store actual realized coordinate
 data for frames like those described above. In this use, it is similar
@@ -266,34 +266,35 @@ of `~astropy.coordinates.BaseCoordinateFrame`.  Detailed instructions for
 subclassing are in the docstrings for that class.  The key aspects are to
 define the class attributes ``default_representation`` and
 ``frame_specific_representation_info`` along with frame attributes as
-`~astropy.coordinates.FrameAttribute` class instances (or subclasses like
-`~astropy.coordinates.TimeFrameAttribute`).  If these are
+`~astropy.coordinates.Attribute` class instances (or subclasses like
+`~astropy.coordinates.TimeAttribute`).  If these are
 defined, there is often no need to define an ``__init__`` function, as the
 initializer in `~astropy.coordinates.BaseCoordinateFrame` will probably behave
 the way you want.  As an example::
 
-  >>> from astropy.coordinates import BaseCoordinateFrame, FrameAttribute, TimeFrameAttribute, RepresentationMapping
+  >>> from astropy.coordinates import BaseCoordinateFrame, Attribute, TimeAttribute, RepresentationMapping
+  >>> import astropy.coordinates.representation as r
   >>> class MyFrame(BaseCoordinateFrame):
   ...     # Specify how coordinate values are represented when outputted
-  ...      default_representation = SphericalRepresentation
+  ...      default_representation = r.SphericalRepresentation
   ...
   ...      # Specify overrides to the default names and units for all available
   ...      # representations (subclasses of BaseRepresentation).
   ...      frame_specific_representation_info = {
-  ...          'spherical': [RepresentationMapping(reprname='lon', framename='R', defaultunit=u.rad),
-  ...                        RepresentationMapping(reprname='lat', framename='D', defaultunit=u.rad),
-  ...                        RepresentationMapping(reprname='distance', framename='DIST', defaultunit=None)],
-  ...          'unitspherical': [RepresentationMapping(reprname='lon', framename='R', defaultunit=u.rad),
-  ...                            RepresentationMapping(reprname='lat', framename='D', defaultunit=u.rad)],
-  ...          'cartesian': [RepresentationMapping(reprname='x', framename='X'),
-  ...                        RepresentationMapping(reprname='y', framename='Y'),
-  ...                        RepresentationMapping(reprname='z', framename='Z')]
+  ...          r.SphericalRepresentation: [RepresentationMapping(reprname='lon', framename='R', defaultunit=u.rad),
+  ...                                      RepresentationMapping(reprname='lat', framename='D', defaultunit=u.rad),
+  ...                                      RepresentationMapping(reprname='distance', framename='DIST', defaultunit=None)],
+  ...          r.UnitSphericalRepresentation: [RepresentationMapping(reprname='lon', framename='R', defaultunit=u.rad),
+  ...                                          RepresentationMapping(reprname='lat', framename='D', defaultunit=u.rad)],
+  ...          r.CartesianRepresentation: [RepresentationMapping(reprname='x', framename='X'),
+  ...                                      RepresentationMapping(reprname='y', framename='Y'),
+  ...                                      RepresentationMapping(reprname='z', framename='Z')]
   ...      }
   ...
   ...      # Specify frame attributes required to fully specify the frame
-  ...      location = FrameAttribute(default=None)
-  ...      equinox = TimeFrameAttribute(default='B1950')
-  ...      obstime = TimeFrameAttribute(default=None, secondary_attribute='equinox')
+  ...      location = Attribute(default=None)
+  ...      equinox = TimeAttribute(default='B1950')
+  ...      obstime = TimeAttribute(default=None, secondary_attribute='equinox')
 
   >>> c = MyFrame(R=10*u.deg, D=20*u.deg)
   >>> c  # doctest: +FLOAT_CMP
@@ -301,6 +302,10 @@ the way you want.  As an example::
       ( 0.17453293,  0.34906585)>
   >>> c.equinox
   <Time object: scale='utc' format='byear_str' value=B1950.000>
+
+If you also want to support velocity data in your coordinate frame, see the
+velocities documentation at
+:ref:`astropy-coordinate-custom-frame-with-velocities`.
 
 You can also define arbitrary methods for any added functionality you
 want your frame to have that's unique to that frame.  These methods will
@@ -331,7 +336,7 @@ the `~astropy.coordinates.TransformGraph` class.  This graph (in the
 "graph theory" sense, not "plot"), stores all the transformations
 between all of the builtin frames, as well as tools for finding shortest
 paths through this graph to transform from any frame to any other.  All
-of the power of this graph is available to user-created frames, meaning
+of the power of this graph is available to user-created frames as well, meaning
 that once you define even one transform from your frame to some frame in
 the graph,  coordinates defined in your frame can be transformed to
 *any* other frame in the graph.
@@ -345,12 +350,19 @@ subclasses/types of transformations are:
     A transform that is defined as a function that takes a frame object
     of one frame class and returns an object of another class.
 
+* `~astropy.coordinates.AffineTransform`
+
+    A transformation that includes a linear matrix operation and a translation
+    (vector offset). These transformations are defined by a 3x3 matrix and a
+    3-vector for the offset (supplied as a Cartesian representation). The
+    transformation is applied to the Cartesian representation of one frame and
+    transforms into the Cartesian representation of the target frame.
+
 * `~astropy.coordinates.StaticMatrixTransform`
 * `~astropy.coordinates.DynamicMatrixTransform`
 
-    These are both for transformations defined as a 3x3 matrix
-    transforming the Cartesian representation of one frame into the
-    target frame's Cartesian representation.  The static version is for
+    The matrix transforms are `~astropy.coordinates.AffineTransform`'s without
+    a translation, i.e. a rotation. The static version is for
     the case where the matrix is independent of the frame attributes
     (e.g., the ICRS->FK5 transformation, because ICRS has no frame
     attributes).  The dynamic case is for transformations where the
@@ -393,3 +405,7 @@ matrix).  Hence, in general, it is better to define whatever are the
 most natural transformations for a user-defined frame, rather than
 worrying about optimizing or caching a transformation to speed up the
 process.
+
+For a demonstration of how to define transformation functions that also work for
+transforming velocity components, see
+:ref:`astropy-coordinate-transform-with-velocities`.
